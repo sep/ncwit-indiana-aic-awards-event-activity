@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Template Game — Dodge It!</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #0a0a1a; font-family: 'Segoe UI', system-ui, sans-serif; }
+        canvas { display: block; }
+
+        /* --- UI Overlay --- */
+        #ui {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        #score {
+            position: absolute;
+            top: 20px; right: 20px;
+            font-size: 2rem;
+            color: #0ff;
+            font-weight: 700;
+            text-shadow: 0 0 10px #0ff;
+        }
+
+        #controls-hint {
+            position: absolute;
+            bottom: 20px; left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        /* --- Title & Game Over Screens --- */
+        .screen {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(10, 10, 26, 0.9);
+            z-index: 20;
+            pointer-events: auto;
+        }
+
+        .screen h1 {
+            font-size: 3.5rem;
+            color: #0ff;
+            text-shadow: 0 0 20px #0ff, 0 0 40px #0ff;
+            margin-bottom: 0.5rem;
+        }
+
+        .screen .sub {
+            font-size: 1.2rem;
+            color: #888;
+            margin-bottom: 2rem;
+        }
+
+        .screen .start-text {
+            font-size: 1.3rem;
+            color: #f0f;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        .screen .final-score {
+            font-size: 2rem;
+            color: #0ff;
+            margin-bottom: 1.5rem;
+        }
+
+        .screen button {
+            padding: 0.8rem 2.5rem;
+            font-size: 1.1rem;
+            border: 2px solid #0ff;
+            background: transparent;
+            color: #0ff;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+            pointer-events: auto;
+        }
+        .screen button:hover {
+            background: #0ff22;
+        }
+
+        .credit {
+            position: absolute;
+            bottom: 20px;
+            font-size: 0.8rem;
+            color: #555;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<!-- UI Overlay -->
+<div id="ui">
+    <div id="score">0</div>
+    <div id="controls-hint">← → or A/D to move</div>
+</div>
+
+<!-- Title Screen -->
+<div id="title-screen" class="screen">
+    <h1>DODGE IT!</h1>
+    <p class="sub">A Three.js Game</p>
+    <p class="start-text">Press SPACE to Start</p>
+    <p class="credit">Template Game — NCWIT Indiana AIC Awards</p>
+</div>
+
+<!-- Game Over Screen -->
+<div id="gameover-screen" class="screen hidden">
+    <h1>GAME OVER</h1>
+    <p class="final-score" id="final-score">Score: 0</p>
+    <button id="restart-btn">Play Again</button>
+    <p class="credit">Template Game — NCWIT Indiana AIC Awards</p>
+</div>
+
+<script>
+// =============================================================
+// GAME CONFIGURATION — tweak these values to customize!
+// =============================================================
+const CONFIG = {
+    playerSpeed: 0.15,        // How fast the player moves
+    obstacleSpeed: 0.06,      // Starting speed of falling obstacles
+    spawnRate: 60,             // Frames between obstacle spawns (lower = more)
+    speedIncrease: 0.00005,   // How much faster it gets each frame
+    playerColor: 0x00ffff,    // Player color (cyan)
+    obstacleColor: 0xff00ff,  // Obstacle color (magenta)
+    bgColor: 0x0a0a1a,        // Background color
+    floorColor: 0x111133,     // Floor color
+};
+
+// =============================================================
+// THREE.JS SETUP
+// =============================================================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(CONFIG.bgColor);
+scene.fog = new THREE.Fog(CONFIG.bgColor, 10, 30);
+
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(0, 8, 10);
+camera.lookAt(0, 0, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+// --- Lighting ---
+const ambientLight = new THREE.AmbientLight(0x404060, 0.6);
+scene.add(ambientLight);
+
+const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+directionalLight.position.set(5, 10, 5);
+scene.add(directionalLight);
+
+const pointLight = new THREE.PointLight(CONFIG.playerColor, 1, 15);
+pointLight.position.set(0, 3, 0);
+scene.add(pointLight);
+
+// --- Floor ---
+const floorGeometry = new THREE.PlaneGeometry(20, 30);
+const floorMaterial = new THREE.MeshStandardMaterial({
+    color: CONFIG.floorColor,
+    roughness: 0.8,
+    metalness: 0.2
+});
+const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -0.5;
+scene.add(floor);
+
+// --- Grid lines on floor for visual depth ---
+const gridHelper = new THREE.GridHelper(20, 20, 0x222255, 0x222255);
+gridHelper.position.y = -0.49;
+scene.add(gridHelper);
+
+// --- Player ---
+const playerGeometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+const playerMaterial = new THREE.MeshStandardMaterial({
+    color: CONFIG.playerColor,
+    emissive: CONFIG.playerColor,
+    emissiveIntensity: 0.3,
+    roughness: 0.3,
+    metalness: 0.7
+});
+const player = new THREE.Mesh(playerGeometry, playerMaterial);
+player.position.set(0, 0, 4);
+scene.add(player);
+
+// =============================================================
+// GAME STATE
+// =============================================================
+let gameState = 'title'; // 'title', 'playing', 'gameover'
+let score = 0;
+let frameCount = 0;
+let currentObstacleSpeed = CONFIG.obstacleSpeed;
+let obstacles = [];
+let particles = [];
+
+// --- Input ---
+const keys = {};
+window.addEventListener('keydown', (e) => {
+    keys[e.key] = true;
+
+    // Start game from title screen
+    if (e.code === 'Space' && gameState === 'title') {
+        startGame();
+    }
+});
+window.addEventListener('keyup', (e) => { keys[e.key] = false; });
+
+// --- Restart button ---
+document.getElementById('restart-btn').addEventListener('click', startGame);
+
+// =============================================================
+// GAME FUNCTIONS
+// =============================================================
+
+function startGame() {
+    // Resume audio context (browsers require a user gesture first)
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    // Reset state
+    score = 0;
+    frameCount = 0;
+    currentObstacleSpeed = CONFIG.obstacleSpeed;
+    player.position.set(0, 0, 4);
+
+    // Clear obstacles
+    obstacles.forEach(o => scene.remove(o));
+    obstacles = [];
+
+    // Clear particles
+    particles.forEach(p => scene.remove(p));
+    particles = [];
+
+    // Update UI
+    document.getElementById('score').textContent = '0';
+    document.getElementById('title-screen').classList.add('hidden');
+    document.getElementById('gameover-screen').classList.add('hidden');
+
+    gameState = 'playing';
+}
+
+function gameOver() {
+    gameState = 'gameover';
+    document.getElementById('final-score').textContent = `Score: ${score}`;
+    document.getElementById('gameover-screen').classList.remove('hidden');
+
+    // Spawn explosion particles at player position
+    spawnExplosion(player.position.x, player.position.y, player.position.z);
+}
+
+// --- Obstacle spawning ---
+function spawnObstacle() {
+    const geometry = new THREE.SphereGeometry(0.4, 8, 8);
+    const material = new THREE.MeshStandardMaterial({
+        color: CONFIG.obstacleColor,
+        emissive: CONFIG.obstacleColor,
+        emissiveIntensity: 0.2,
+    });
+    const obstacle = new THREE.Mesh(geometry, material);
+
+    // Random X position within play area
+    obstacle.position.set(
+        (Math.random() - 0.5) * 8,
+        0,
+        -10
+    );
+    scene.add(obstacle);
+    obstacles.push(obstacle);
+}
+
+// --- Particle explosion ---
+function spawnExplosion(x, y, z) {
+    for (let i = 0; i < 20; i++) {
+        const geometry = new THREE.BoxGeometry(0.15, 0.15, 0.15);
+        const material = new THREE.MeshBasicMaterial({
+            color: CONFIG.playerColor,
+            transparent: true,
+            opacity: 1
+        });
+        const particle = new THREE.Mesh(geometry, material);
+        particle.position.set(x, y, z);
+
+        // Random velocity
+        particle.userData.velocity = new THREE.Vector3(
+            (Math.random() - 0.5) * 0.3,
+            Math.random() * 0.2,
+            (Math.random() - 0.5) * 0.3
+        );
+        particle.userData.life = 1.0;
+
+        scene.add(particle);
+        particles.push(particle);
+    }
+}
+
+// --- Collision detection ---
+function checkCollision(a, b, threshold = 0.8) {
+    const dx = a.position.x - b.position.x;
+    const dz = a.position.z - b.position.z;
+    return Math.sqrt(dx * dx + dz * dz) < threshold;
+}
+
+// =============================================================
+// WEB AUDIO — simple synth sounds (no external files needed)
+// =============================================================
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playSound(freq, duration, type = 'square') {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+}
+
+function playHitSound() { playSound(150, 0.3, 'sawtooth'); }
+function playScoreSound() { playSound(800, 0.1, 'sine'); }
+
+// =============================================================
+// GAME LOOP
+// =============================================================
+function animate() {
+    requestAnimationFrame(animate);
+
+    if (gameState === 'playing') {
+        frameCount++;
+
+        // --- Player movement ---
+        if (keys['ArrowLeft'] || keys['a'] || keys['A']) {
+            player.position.x -= CONFIG.playerSpeed;
+        }
+        if (keys['ArrowRight'] || keys['d'] || keys['D']) {
+            player.position.x += CONFIG.playerSpeed;
+        }
+        // Clamp player to play area
+        player.position.x = Math.max(-4, Math.min(4, player.position.x));
+
+        // Player rotation for visual flair
+        player.rotation.y += 0.02;
+        player.rotation.x += 0.01;
+
+        // Update point light to follow player
+        pointLight.position.x = player.position.x;
+
+        // --- Spawn obstacles ---
+        if (frameCount % CONFIG.spawnRate === 0) {
+            spawnObstacle();
+        }
+
+        // --- Move obstacles ---
+        currentObstacleSpeed += CONFIG.speedIncrease;
+        for (let i = obstacles.length - 1; i >= 0; i--) {
+            const obs = obstacles[i];
+            obs.position.z += currentObstacleSpeed + (currentObstacleSpeed * frameCount * 0.0001);
+            obs.rotation.x += 0.05;
+            obs.rotation.z += 0.03;
+
+            // Check collision with player
+            if (checkCollision(player, obs)) {
+                playHitSound();
+                gameOver();
+                return;
+            }
+
+            // Remove if past camera
+            if (obs.position.z > 10) {
+                scene.remove(obs);
+                obstacles.splice(i, 1);
+                score++;
+                document.getElementById('score').textContent = score;
+                if (score % 5 === 0) playScoreSound();
+            }
+        }
+    }
+
+    // --- Update particles (always, even during game over) ---
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.position.add(p.userData.velocity);
+        p.userData.velocity.y -= 0.005; // gravity
+        p.userData.life -= 0.02;
+        p.material.opacity = p.userData.life;
+
+        if (p.userData.life <= 0) {
+            scene.remove(p);
+            particles.splice(i, 1);
+        }
+    }
+
+    // --- Gentle camera sway on title screen ---
+    if (gameState === 'title') {
+        camera.position.x = Math.sin(Date.now() * 0.001) * 0.5;
+    } else {
+        camera.position.x = THREE.MathUtils.lerp(camera.position.x, 0, 0.05);
+    }
+
+    renderer.render(scene, camera);
+}
+
+// =============================================================
+// HANDLE RESIZE
+// =============================================================
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Start the render loop
+animate();
+</script>
+</body>
+</html>

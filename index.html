@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NCWIT Indiana AIC Awards — Game Arcade</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <h1>🎮 Game Arcade</h1>
+        <p class="subtitle">NCWIT Indiana AIC Awards Event</p>
+        <p class="description">Every game below was built by a participant using AI-powered coding with GitHub Copilot + Three.js</p>
+    </header>
+
+    <main>
+        <div id="games-grid" class="games-grid">
+            <div class="loading">Loading games...</div>
+        </div>
+        <div id="no-games" class="no-games" style="display: none;">
+            <p>🚀 No games yet — participants are still building!</p>
+            <p>Check back soon to play what they've created.</p>
+        </div>
+    </main>
+
+    <footer>
+        <p>Built with 💜 at SEP</p>
+    </footer>
+
+    <script>
+        const GENRE_EMOJI = {
+            'Dodge It!': '🏃',
+            'Collector': '⭐',
+            'Space Shooter': '🚀',
+            'Maze Runner': '🏁',
+            'Endless Runner': '🏃‍♂️',
+            'Tower Defense': '🏰',
+            'Brick Breaker': '🧱',
+            'Snake 3D': '🐍',
+            'Asteroid Field': '☄️',
+            'Rhythm Runner': '🎵',
+            'Survival Arena': '⚔️',
+            'Platformer': '🦘'
+        };
+
+        const THEME_COLORS = {
+            'Neon Cyber': ['#0ff', '#f0f', '#0f0'],
+            'Sunset': ['#ff6b35', '#f7931e', '#9b59b6'],
+            'Ocean': ['#006994', '#40e0d0', '#48d1cc'],
+            'Forest': ['#228b22', '#8b4513', '#ffd700'],
+            'Monochrome': ['#fff', '#888', '#333']
+        };
+
+        async function loadGames() {
+            try {
+                const response = await fetch('games/manifest.json');
+                const games = await response.json();
+                const grid = document.getElementById('games-grid');
+                const noGames = document.getElementById('no-games');
+
+                if (!games.length) {
+                    grid.style.display = 'none';
+                    noGames.style.display = 'block';
+                    return;
+                }
+
+                grid.innerHTML = games.map(game => {
+                    const emoji = GENRE_EMOJI[game.genre] || '🎮';
+                    const colors = THEME_COLORS[game.color] || ['#6c5ce7', '#a29bfe', '#dfe6e9'];
+                    const gradient = `linear-gradient(135deg, ${colors[0]}22, ${colors[1]}22)`;
+                    const borderColor = colors[0];
+
+                    return `
+                        <a href="games/${game.folder}/index.html" class="game-card" style="background: ${gradient}; border-color: ${borderColor}">
+                            <div class="game-emoji">${emoji}</div>
+                            <h2 class="game-title">${escapeHtml(game.title)}</h2>
+                            <p class="game-creator">by ${escapeHtml(game.name)}</p>
+                            <span class="game-genre" style="background: ${borderColor}33; color: ${borderColor}">${escapeHtml(game.genre)}</span>
+                            <div class="play-button" style="background: ${borderColor}">▶ Play</div>
+                        </a>
+                    `;
+                }).join('');
+            } catch (e) {
+                document.getElementById('games-grid').style.display = 'none';
+                document.getElementById('no-games').style.display = 'block';
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        loadGames();
+    </script>
+</body>
+</html>
