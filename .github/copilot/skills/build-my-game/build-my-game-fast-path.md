@@ -32,3 +32,4 @@ Use this as the operational fast path for /build-my-game runs.
   - Every game must support both keyboard controls (desktop) AND on-screen touch controls (mobile). Use `@media (pointer: coarse)` to show touch buttons only on touch devices. Title/game-over screens must respond to both SPACE and tap.
 - The manifest is games/manifest.js (NOT .json) — format: `const GAMES = [{title, author, path, genre?, color?}, ...]`
 - index.html loads manifest.js via `<script src="games/manifest.js">` (no fetch; works with file:// protocol).
+- After generating the game and updating the manifest, open the participant's game in Chrome by running: `open -a "Google Chrome" games/<their-folder>/index.html`

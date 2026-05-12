@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake — A Haunted 3D Snake Game</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #1a0a0a; font-family: 'Segoe UI', system-ui, sans-serif; }
+        canvas { display: block; }
+
+        /* --- UI Overlay --- */
+        #ui {
+            position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none; z-index: 10;
+        }
+        #score {
+            position: absolute; top: 20px; right: 20px;
+            font-size: 2rem; color: #ff6633;
+            font-weight: 700; text-shadow: 0 0 10px #ff6633;
+        }
+        #controls-hint {
+            position: absolute; bottom: 20px; left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.9rem; color: #886655;
+        }
+        #event-banner {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 2rem; color: #ff4400;
+            font-weight: 700; text-shadow: 0 0 20px #ff4400;
+            opacity: 0; transition: opacity 0.3s;
+            pointer-events: none;
+        }
+        #event-banner.show { opacity: 1; }
+
+        /* --- Screens --- */
+        .screen {
+            position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            background: rgba(26, 10, 10, 0.92);
+            z-index: 20; pointer-events: auto;
+        }
+        .screen h1 {
+            font-size: 3.5rem; color: #ff6633;
+            text-shadow: 0 0 20px #ff6633, 0 0 40px #ff4400;
+            margin-bottom: 0.5rem;
+        }
+        .screen .sub { font-size: 1.2rem; color: #aa7755; margin-bottom: 2rem; }
+        .screen .start-text {
+            font-size: 1.3rem; color: #ff4400;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        .screen .final-score {
+            font-size: 2rem; color: #ff6633; margin-bottom: 1.5rem;
+        }
+        .screen button {
+            padding: 0.8rem 2.5rem; font-size: 1.1rem;
+            border: 2px solid #ff6633; background: transparent;
+            color: #ff6633; border-radius: 8px; cursor: pointer;
+            transition: background 0.2s; pointer-events: auto;
+        }
+        .screen button:hover { background: rgba(255,102,51,0.15); }
+        .credit { position: absolute; bottom: 20px; font-size: 0.8rem; color: #664433; }
+        @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    <div id="score">0</div>
+    <div id="controls-hint">Arrow Keys to move</div>
+    <div id="event-banner"></div>
+</div>
+
+<div id="title-screen" class="screen">
+    <h1>🐍 SNAKE 🎃</h1>
+    <p class="sub">A Haunted 3D Snake Game</p>
+    <p class="start-text">Press SPACE to Start</p>
+    <p class="credit">Made by Jean — NCWIT Indiana AIC Awards</p>
+</div>
+
+<div id="gameover-screen" class="screen hidden">
+    <h1>GAME OVER</h1>
+    <p class="final-score" id="final-score">Score: 0</p>
+    <button id="restart-btn">Play Again</button>
+    <p class="credit">Made by Jean — NCWIT Indiana AIC Awards</p>
+</div>
+
+<script>
+// =============================================================
+// GAME CONFIG
+// =============================================================
+const GRID_SIZE = 16;           // Grid is 16x16
+const CELL_SIZE = 1;            // Each cell is 1 unit
+const TICK_RATE = 150;          // ms between moves (lower = faster)
+const RANDOM_EVENT_INTERVAL = 15000; // Random event every 15 seconds
+
+// Sunset palette
+const COLORS = {
+    bg: 0x1a0a0a,
+    floor: 0x2a1510,
+    snake: 0xff6633,
+    snakeEmissive: 0xff4400,
+    food: 0xffcc00,
+    ghost: 0xccbbaa,
+    pumpkin: 0xff6600,
+    wall: 0x553322,
+    fog: 0x1a0a0a,
+    accent: 0xff3300,
+    purple: 0x9933aa,
+};
+
+// =============================================================
+// AUDIO — synthesized spooky sounds
+// =============================================================
+let audioCtx;
+function initAudio() {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+function resumeAudio() {
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}
+// Play a short tone
+function playTone(freq, duration, type = 'square', vol = 0.15) {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + duration);
+}
+function playEatSound() { playTone(440, 0.12, 'square', 0.12); playTone(660, 0.1, 'sine', 0.1); }
+function playDeathSound() { playTone(200, 0.4, 'sawtooth', 0.2); playTone(120, 0.6, 'sawtooth', 0.15); }
+function playEventSound() { playTone(330, 0.15, 'triangle', 0.12); playTone(500, 0.15, 'triangle', 0.12); }
+
+// =============================================================
+// THREE.JS SETUP
+// =============================================================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(COLORS.bg);
+scene.fog = new THREE.FogExp2(COLORS.fog, 0.04);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(GRID_SIZE / 2, 18, GRID_SIZE / 2 + 10);
+camera.lookAt(GRID_SIZE / 2, 0, GRID_SIZE / 2);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+// Lighting — warm sunset tones
+const ambient = new THREE.AmbientLight(0x553322, 0.5);
+scene.add(ambient);
+const dirLight = new THREE.DirectionalLight(0xff8844, 0.7);
+dirLight.position.set(8, 12, 8);
+dirLight.castShadow = true;
+scene.add(dirLight);
+const pointLight = new THREE.PointLight(0xff4400, 0.6, 25);
+pointLight.position.set(GRID_SIZE / 2, 5, GRID_SIZE / 2);
+scene.add(pointLight);
+
+// --- Floor ---
+const floorGeo = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE);
+const floorMat = new THREE.MeshStandardMaterial({ color: COLORS.floor, roughness: 0.9 });
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.rotation.x = -Math.PI / 2;
+floor.position.set(GRID_SIZE / 2, -0.01, GRID_SIZE / 2);
+floor.receiveShadow = true;
+scene.add(floor);
+
+// Grid lines for spooky ground
+const gridHelper = new THREE.GridHelper(GRID_SIZE, GRID_SIZE, 0x442211, 0x331100);
+gridHelper.position.set(GRID_SIZE / 2, 0, GRID_SIZE / 2);
+scene.add(gridHelper);
+
+// --- Boundary walls (graveyard fence style) ---
+function createWalls() {
+    const wallMat = new THREE.MeshStandardMaterial({ color: COLORS.wall, roughness: 0.7 });
+    for (let i = 0; i < GRID_SIZE; i++) {
+        // Posts along boundaries
+        const positions = [
+            [i + 0.5, 0.4, 0],            // bottom edge
+            [i + 0.5, 0.4, GRID_SIZE],     // top edge
+            [0, 0.4, i + 0.5],             // left edge
+            [GRID_SIZE, 0.4, i + 0.5],     // right edge
+        ];
+        positions.forEach(([x, y, z]) => {
+            const post = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.06, 0.06, 0.8, 6),
+                wallMat
+            );
+            post.position.set(x, y, z);
+            post.castShadow = true;
+            scene.add(post);
+            // Pointed top
+            const spike = new THREE.Mesh(
+                new THREE.ConeGeometry(0.08, 0.2, 6),
+                new THREE.MeshStandardMaterial({ color: 0xff6633 })
+            );
+            spike.position.set(x, 0.9, z);
+            scene.add(spike);
+        });
+    }
+}
+createWalls();
+
+// --- Haunted decorations: tombstones scattered around the edges ---
+function createTombstone(x, z) {
+    const group = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color: 0x665544, roughness: 0.9 });
+    // Main slab
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.15), mat);
+    slab.position.y = 0.35;
+    group.add(slab);
+    // Rounded top
+    const top = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat);
+    top.position.y = 0.7;
+    group.add(top);
+    group.position.set(x, 0, z);
+    return group;
+}
+// Place tombstones outside the play area
+[-0.7, GRID_SIZE + 0.7].forEach(edge => {
+    for (let i = 2; i < GRID_SIZE; i += 3) {
+        scene.add(createTombstone(edge, i));
+        scene.add(createTombstone(i, edge));
+    }
+});
+
+// --- Floating ghost decorations ---
+const decorGhosts = [];
+function createDecoGhost(x, z) {
+    const group = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({
+        color: 0xccbbaa, transparent: true, opacity: 0.25, emissive: 0x554433, emissiveIntensity: 0.3
+    });
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), mat);
+    body.position.y = 2;
+    group.add(body);
+    // Wispy tail
+    const tail = new THREE.Mesh(new THREE.ConeGeometry(0.25, 0.5, 8), mat);
+    tail.position.y = 1.55;
+    tail.rotation.x = Math.PI;
+    group.add(tail);
+    // Eyes
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff4400 });
+    [-0.1, 0.1].forEach(ox => {
+        const eye = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), eyeMat);
+        eye.position.set(ox, 2.05, 0.25);
+        group.add(eye);
+    });
+    group.position.set(x, 0, z);
+    decorGhosts.push(group);
+    return group;
+}
+scene.add(createDecoGhost(-1.5, 4));
+scene.add(createDecoGhost(GRID_SIZE + 1.5, 12));
+scene.add(createDecoGhost(6, -1.5));
+scene.add(createDecoGhost(10, GRID_SIZE + 1.5));
+
+// --- Pumpkin lanterns in corners ---
+function createPumpkin(x, z) {
+    const group = new THREE.Group();
+    const body = new THREE.Mesh(
+        new THREE.SphereGeometry(0.35, 10, 10),
+        new THREE.MeshStandardMaterial({ color: 0xff6600, roughness: 0.6 })
+    );
+    body.scale.y = 0.8;
+    body.position.y = 0.3;
+    group.add(body);
+    // Stem
+    const stem = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.05, 0.05, 0.2, 6),
+        new THREE.MeshStandardMaterial({ color: 0x335500 })
+    );
+    stem.position.y = 0.6;
+    group.add(stem);
+    // Glowing face (emissive)
+    const face = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.2, 0.15),
+        new THREE.MeshBasicMaterial({ color: 0xffcc00 })
+    );
+    face.position.set(0, 0.3, 0.34);
+    group.add(face);
+    // Point light for glow
+    const glow = new THREE.PointLight(0xff6600, 0.4, 4);
+    glow.position.set(0, 0.5, 0);
+    group.add(glow);
+    group.position.set(x, 0, z);
+    return group;
+}
+scene.add(createPumpkin(-0.5, -0.5));
+scene.add(createPumpkin(GRID_SIZE + 0.5, -0.5));
+scene.add(createPumpkin(-0.5, GRID_SIZE + 0.5));
+scene.add(createPumpkin(GRID_SIZE + 0.5, GRID_SIZE + 0.5));
+
+// =============================================================
+// SNAKE GAME STATE
+// =============================================================
+let snake = [];           // Array of {x, z} grid positions (head first)
+let direction = { x: 1, z: 0 };
+let nextDirection = { x: 1, z: 0 };
+let food = { x: 10, z: 10 };
+let score = 0;
+let gameRunning = false;
+let gameStarted = false;
+let tickTimer = null;
+let currentTickRate = TICK_RATE;
+
+// 3D meshes for snake segments and food
+let snakeMeshes = [];
+let foodMesh = null;
+
+// Random event state
+let eventTimer = null;
+let activeEvent = null;
+let eventTimeout = null;
+
+// =============================================================
+// CREATE 3D OBJECTS FOR SNAKE & FOOD
+// =============================================================
+
+// Snake head: ghost-hunter style (box body, sphere head, cylinder flashlight)
+function createSnakeHead() {
+    const group = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({
+        color: COLORS.snake, emissive: COLORS.snakeEmissive, emissiveIntensity: 0.4,
+        roughness: 0.3, metalness: 0.5
+    });
+    // Body
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.4, 0.6), mat);
+    body.position.y = 0.3;
+    group.add(body);
+    // Head
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8), mat);
+    head.position.y = 0.6;
+    group.add(head);
+    // Eyes (glowing)
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffcc00 });
+    [-0.08, 0.08].forEach(ox => {
+        const eye = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), eyeMat);
+        eye.position.set(ox, 0.65, 0.18);
+        group.add(eye);
+    });
+    // Headlight
+    const light = new THREE.PointLight(COLORS.snake, 0.5, 5);
+    light.position.set(0, 0.5, 0.3);
+    group.add(light);
+    return group;
+}
+
+// Snake body segment: smaller glowing box
+function createSnakeSegment() {
+    const mat = new THREE.MeshStandardMaterial({
+        color: COLORS.snake, emissive: COLORS.snakeEmissive, emissiveIntensity: 0.2,
+        roughness: 0.4, metalness: 0.3
+    });
+    const seg = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.35, 0.55), mat);
+    seg.position.y = 0.25;
+    const group = new THREE.Group();
+    group.add(seg);
+    return group;
+}
+
+// Food: a ghost you eat! (sphere + cone tail, semi-transparent)
+function createFoodMesh() {
+    const group = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({
+        color: COLORS.ghost, transparent: true, opacity: 0.7,
+        emissive: 0xffffff, emissiveIntensity: 0.3
+    });
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), mat);
+    body.position.y = 0.4;
+    group.add(body);
+    const tail = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.35, 8), mat);
+    tail.position.y = 0.1;
+    tail.rotation.x = Math.PI;
+    group.add(tail);
+    // Spooky eyes
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    [-0.08, 0.08].forEach(ox => {
+        const eye = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), eyeMat);
+        eye.position.set(ox, 0.45, 0.25);
+        group.add(eye);
+    });
+    return group;
+}
+
+// =============================================================
+// PARTICLE EFFECTS
+// =============================================================
+const particles = [];
+
+function spawnParticles(x, z, color, count = 8) {
+    for (let i = 0; i < count; i++) {
+        const geo = new THREE.SphereGeometry(0.06, 4, 4);
+        const mat = new THREE.MeshBasicMaterial({ color });
+        const p = new THREE.Mesh(geo, mat);
+        p.position.set(x + 0.5, 0.5, z + 0.5);
+        p.userData.vx = (Math.random() - 0.5) * 0.15;
+        p.userData.vy = Math.random() * 0.12 + 0.05;
+        p.userData.vz = (Math.random() - 0.5) * 0.15;
+        p.userData.life = 1;
+        scene.add(p);
+        particles.push(p);
+    }
+}
+
+function updateParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.position.x += p.userData.vx;
+        p.position.y += p.userData.vy;
+        p.position.z += p.userData.vz;
+        p.userData.vy -= 0.005;
+        p.userData.life -= 0.03;
+        p.scale.setScalar(p.userData.life);
+        if (p.userData.life <= 0) {
+            scene.remove(p);
+            particles.splice(i, 1);
+        }
+    }
+}
+
+// =============================================================
+// GAME LOGIC
+// =============================================================
+
+function initSnake() {
+    // Clear old meshes
+    snakeMeshes.forEach(m => scene.remove(m));
+    snakeMeshes = [];
+    if (foodMesh) scene.remove(foodMesh);
+
+    // Start in the center
+    const cx = Math.floor(GRID_SIZE / 2);
+    const cz = Math.floor(GRID_SIZE / 2);
+    snake = [
+        { x: cx, z: cz },
+        { x: cx - 1, z: cz },
+        { x: cx - 2, z: cz },
+    ];
+    direction = { x: 1, z: 0 };
+    nextDirection = { x: 1, z: 0 };
+
+    // Create head
+    const head = createSnakeHead();
+    head.position.set(snake[0].x + 0.5, 0, snake[0].z + 0.5);
+    scene.add(head);
+    snakeMeshes.push(head);
+
+    // Create body segments
+    for (let i = 1; i < snake.length; i++) {
+        const seg = createSnakeSegment();
+        seg.position.set(snake[i].x + 0.5, 0, snake[i].z + 0.5);
+        scene.add(seg);
+        snakeMeshes.push(seg);
+    }
+
+    // Place food
+    placeFood();
+    score = 0;
+    currentTickRate = TICK_RATE;
+    document.getElementById('score').textContent = '0';
+}
+
+function placeFood() {
+    if (foodMesh) scene.remove(foodMesh);
+    // Find empty spot
+    let fx, fz;
+    do {
+        fx = Math.floor(Math.random() * GRID_SIZE);
+        fz = Math.floor(Math.random() * GRID_SIZE);
+    } while (snake.some(s => s.x === fx && s.z === fz));
+    food = { x: fx, z: fz };
+
+    foodMesh = createFoodMesh();
+    foodMesh.position.set(food.x + 0.5, 0, food.z + 0.5);
+    scene.add(foodMesh);
+}
+
+function gameTick() {
+    if (!gameRunning) return;
+
+    // Apply queued direction
+    direction = { ...nextDirection };
+
+    // Calculate new head position
+    let newX = snake[0].x + direction.x;
+    let newZ = snake[0].z + direction.z;
+
+    // Handle wrap-around if "Portal Warp" random event is active
+    if (activeEvent === 'wrap') {
+        newX = ((newX % GRID_SIZE) + GRID_SIZE) % GRID_SIZE;
+        newZ = ((newZ % GRID_SIZE) + GRID_SIZE) % GRID_SIZE;
+    }
+
+    // Wall collision
+    if (newX < 0 || newX >= GRID_SIZE || newZ < 0 || newZ >= GRID_SIZE) {
+        gameOver();
+        return;
+    }
+
+    // Self collision (skip if "ghost" event active)
+    if (activeEvent !== 'ghost') {
+        for (let i = 0; i < snake.length; i++) {
+            if (snake[i].x === newX && snake[i].z === newZ) {
+                gameOver();
+                return;
+            }
+        }
+    }
+
+    // Move snake
+    const ate = (newX === food.x && newZ === food.z);
+    snake.unshift({ x: newX, z: newZ });
+
+    if (ate) {
+        // Ate food — grow and get points
+        score += (activeEvent === 'double' ? 20 : 10);
+        document.getElementById('score').textContent = score;
+        playEatSound();
+        spawnParticles(food.x, food.z, COLORS.food, 12);
+
+        // Add new segment mesh
+        const newSeg = createSnakeSegment();
+        scene.add(newSeg);
+        snakeMeshes.push(newSeg);
+
+        placeFood();
+    } else {
+        snake.pop();
+    }
+
+    // Update mesh positions
+    // Replace head mesh with fresh one at new position
+    scene.remove(snakeMeshes[0]);
+    const newHead = createSnakeHead();
+    // Rotate head to face direction
+    if (direction.x === 1) newHead.rotation.y = -Math.PI / 2;
+    else if (direction.x === -1) newHead.rotation.y = Math.PI / 2;
+    else if (direction.z === 1) newHead.rotation.y = Math.PI;
+    else if (direction.z === -1) newHead.rotation.y = 0;
+    newHead.position.set(snake[0].x + 0.5, 0, snake[0].z + 0.5);
+    scene.add(newHead);
+    snakeMeshes[0] = newHead;
+
+    for (let i = 1; i < snake.length; i++) {
+        if (snakeMeshes[i]) {
+            snakeMeshes[i].position.set(snake[i].x + 0.5, 0, snake[i].z + 0.5);
+        }
+    }
+}
+
+function gameOver() {
+    gameRunning = false;
+    clearInterval(tickTimer);
+    clearInterval(eventTimer);
+    clearTimeout(eventTimeout);
+    activeEvent = null;
+    playDeathSound();
+    spawnParticles(snake[0].x, snake[0].z, COLORS.accent, 20);
+    document.getElementById('final-score').textContent = 'Score: ' + score;
+    document.getElementById('gameover-screen').classList.remove('hidden');
+    document.getElementById('event-banner').classList.remove('show');
+}
+
+// =============================================================
+// RANDOM EVENTS — every 15 seconds something wild happens!
+// =============================================================
+const EVENTS = [
+    { name: 'speed', label: '⚡ SPEED SURGE!', duration: 5000 },
+    { name: 'slow', label: '🐌 SLOW MOTION!', duration: 5000 },
+    { name: 'double', label: '✨ DOUBLE POINTS!', duration: 8000 },
+    { name: 'ghost', label: '👻 GHOST MODE — pass through yourself!', duration: 6000 },
+    { name: 'wrap', label: '🌀 PORTAL WALLS — wrap around!', duration: 8000 },
+    { name: 'dark', label: '🌑 LIGHTS OUT!', duration: 5000 },
+    { name: 'reverse', label: '🔄 CONTROLS REVERSED!', duration: 6000 },
+    { name: 'grow', label: '📏 MEGA SNAKE — instant growth!', duration: 0 },
+];
+
+function triggerRandomEvent() {
+    // End any active event
+    endEvent();
+
+    const evt = EVENTS[Math.floor(Math.random() * EVENTS.length)];
+    activeEvent = evt.name;
+    playEventSound();
+
+    const banner = document.getElementById('event-banner');
+    banner.textContent = evt.label;
+    banner.classList.add('show');
+
+    // Apply event effects
+    if (evt.name === 'speed') {
+        clearInterval(tickTimer);
+        tickTimer = setInterval(gameTick, currentTickRate * 0.5);
+    } else if (evt.name === 'slow') {
+        clearInterval(tickTimer);
+        tickTimer = setInterval(gameTick, currentTickRate * 2);
+    } else if (evt.name === 'dark') {
+        ambient.intensity = 0.1;
+        dirLight.intensity = 0.1;
+    } else if (evt.name === 'grow') {
+        // Instantly add 3 segments
+        for (let k = 0; k < 3; k++) {
+            const tail = snake[snake.length - 1];
+            snake.push({ x: tail.x, z: tail.z });
+            const seg = createSnakeSegment();
+            seg.position.set(tail.x + 0.5, 0, tail.z + 0.5);
+            scene.add(seg);
+            snakeMeshes.push(seg);
+        }
+        score += 5;
+        document.getElementById('score').textContent = score;
+    }
+
+    // Auto-end after duration
+    if (evt.duration > 0) {
+        eventTimeout = setTimeout(endEvent, evt.duration);
+    } else {
+        // Instant event — hide banner after short delay
+        setTimeout(() => banner.classList.remove('show'), 2000);
+        activeEvent = null;
+    }
+}
+
+function endEvent() {
+    const banner = document.getElementById('event-banner');
+    banner.classList.remove('show');
+
+    if (activeEvent === 'speed' || activeEvent === 'slow') {
+        clearInterval(tickTimer);
+        tickTimer = setInterval(gameTick, currentTickRate);
+    } else if (activeEvent === 'dark') {
+        ambient.intensity = 0.5;
+        dirLight.intensity = 0.7;
+    }
+    activeEvent = null;
+}
+
+// =============================================================
+// INPUT HANDLING
+// =============================================================
+document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+        if (!gameStarted) {
+            startGame();
+            return;
+        }
+    }
+
+    if (!gameRunning) return;
+
+    // Determine effective direction (reversed if event active)
+    const rev = activeEvent === 'reverse' ? -1 : 1;
+
+    switch (e.code) {
+        case 'ArrowUp':
+        case 'KeyW':
+            if (direction.z !== 1 * rev && direction.z !== -1 * rev || direction.x !== 0)
+                if (direction.z !== -1 * rev)
+                    nextDirection = { x: 0, z: -1 * rev };
+            break;
+        case 'ArrowDown':
+        case 'KeyS':
+            if (direction.z !== -1 * rev && direction.z !== 1 * rev || direction.x !== 0)
+                if (direction.z !== 1 * rev)
+                    nextDirection = { x: 0, z: 1 * rev };
+            break;
+        case 'ArrowLeft':
+        case 'KeyA':
+            if (direction.x !== 1 * rev && direction.x !== -1 * rev || direction.z !== 0)
+                if (direction.x !== -1 * rev)
+                    nextDirection = { x: -1 * rev, z: 0 };
+            break;
+        case 'ArrowRight':
+        case 'KeyD':
+            if (direction.x !== -1 * rev && direction.x !== 1 * rev || direction.z !== 0)
+                if (direction.x !== 1 * rev)
+                    nextDirection = { x: 1 * rev, z: 0 };
+            break;
+    }
+});
+
+// =============================================================
+// START / RESTART
+// =============================================================
+function startGame() {
+    if (!audioCtx) initAudio();
+    resumeAudio();
+
+    document.getElementById('title-screen').classList.add('hidden');
+    document.getElementById('gameover-screen').classList.add('hidden');
+    gameStarted = true;
+    gameRunning = true;
+
+    initSnake();
+    tickTimer = setInterval(gameTick, currentTickRate);
+
+    // Start random events
+    eventTimer = setInterval(() => {
+        if (gameRunning) triggerRandomEvent();
+    }, RANDOM_EVENT_INTERVAL);
+}
+
+document.getElementById('restart-btn').addEventListener('click', startGame);
+
+// =============================================================
+// ANIMATION LOOP
+// =============================================================
+function animate() {
+    requestAnimationFrame(animate);
+
+    // Float the food ghost up and down
+    if (foodMesh) {
+        foodMesh.position.y = Math.sin(Date.now() * 0.003) * 0.2 + 0.1;
+        foodMesh.rotation.y += 0.02;
+    }
+
+    // Animate decorative ghosts
+    decorGhosts.forEach((g, i) => {
+        g.position.y = Math.sin(Date.now() * 0.001 + i * 2) * 0.3;
+        g.children[0].rotation.y += 0.005;
+    });
+
+    // Update particles
+    updateParticles();
+
+    renderer.render(scene, camera);
+}
+animate();
+
+// Handle resize
+window.addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>

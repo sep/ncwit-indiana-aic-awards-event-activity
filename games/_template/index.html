@@ -103,6 +103,53 @@
         }
 
         .hidden { display: none !important; }
+
+        /* --- Mobile Touch Controls --- */
+        #mobile-controls {
+            display: none;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 40%;
+            z-index: 15;
+            pointer-events: auto;
+        }
+        #mobile-controls .touch-zone {
+            position: absolute;
+            bottom: 20px;
+            width: 50%;
+            height: 100%;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+        }
+        #mobile-controls .touch-zone.left { left: 0; }
+        #mobile-controls .touch-zone.right { right: 0; }
+        #mobile-controls .touch-btn {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            color: rgba(255, 255, 255, 0.5);
+            user-select: none;
+            -webkit-user-select: none;
+            margin-bottom: 20px;
+        }
+        #mobile-controls .touch-btn:active,
+        #mobile-controls .touch-btn.active {
+            background: rgba(255, 255, 255, 0.25);
+            border-color: rgba(255, 255, 255, 0.6);
+        }
+        @media (pointer: coarse), (max-width: 768px) {
+            #mobile-controls { display: flex; }
+            #controls-hint { display: none; }
+        }
     </style>
 </head>
 <body>
@@ -113,11 +160,21 @@
     <div id="controls-hint">← → or A/D to move</div>
 </div>
 
+<!-- Mobile Touch Controls -->
+<div id="mobile-controls">
+    <div class="touch-zone left">
+        <div class="touch-btn" id="btn-left">◀</div>
+    </div>
+    <div class="touch-zone right">
+        <div class="touch-btn" id="btn-right">▶</div>
+    </div>
+</div>
+
 <!-- Title Screen -->
 <div id="title-screen" class="screen">
     <h1>DODGE IT!</h1>
     <p class="sub">A Three.js Game</p>
-    <p class="start-text">Press SPACE to Start</p>
+    <p class="start-text">Press SPACE or Tap to Start</p>
     <p class="credit">Template Game — NCWIT Indiana AIC Awards</p>
 </div>
 
@@ -226,6 +283,27 @@ window.addEventListener('keyup', (e) => { keys[e.key] = false; });
 
 // --- Restart button ---
 document.getElementById('restart-btn').addEventListener('click', startGame);
+
+// --- Touch: tap title/gameover screen to start ---
+document.getElementById('title-screen').addEventListener('click', () => {
+    if (gameState === 'title') startGame();
+});
+document.getElementById('title-screen').addEventListener('touchend', (e) => {
+    e.preventDefault();
+    if (gameState === 'title') startGame();
+});
+
+// --- Mobile touch controls ---
+const touchState = { left: false, right: false };
+
+function bindTouchBtn(id, dir) {
+    const btn = document.getElementById(id);
+    btn.addEventListener('touchstart', (e) => { e.preventDefault(); touchState[dir] = true; btn.classList.add('active'); }, { passive: false });
+    btn.addEventListener('touchend', (e) => { e.preventDefault(); touchState[dir] = false; btn.classList.remove('active'); }, { passive: false });
+    btn.addEventListener('touchcancel', () => { touchState[dir] = false; btn.classList.remove('active'); });
+}
+bindTouchBtn('btn-left', 'left');
+bindTouchBtn('btn-right', 'right');
 
 // =============================================================
 // GAME FUNCTIONS
@@ -348,11 +426,11 @@ function animate() {
     if (gameState === 'playing') {
         frameCount++;
 
-        // --- Player movement ---
-        if (keys['ArrowLeft'] || keys['a'] || keys['A']) {
+        // --- Player movement (keyboard + touch) ---
+        if (keys['ArrowLeft'] || keys['a'] || keys['A'] || touchState.left) {
             player.position.x -= CONFIG.playerSpeed;
         }
-        if (keys['ArrowRight'] || keys['d'] || keys['D']) {
+        if (keys['ArrowRight'] || keys['d'] || keys['D'] || touchState.right) {
             player.position.x += CONFIG.playerSpeed;
         }
         // Clamp player to play area

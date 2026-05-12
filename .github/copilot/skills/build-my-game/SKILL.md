@@ -185,7 +185,7 @@ After creating the game file, update `games/manifest.js`:
 
 After generating the game:
 1. Tell the participant their game is ready and where to find it
-2. Suggest they open `games/<their-folder>/index.html` with Live Server or in a browser
+2. Open the game in Chrome by running: `open -a "Google Chrome" games/<their-folder>/index.html`
 3. Invite them to keep customizing! Suggest ideas like:
    - "Want to change what your player looks like?"
    - "Should we add a different type of enemy?"

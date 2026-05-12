@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyber Cool — Platformer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #0a0014; font-family: 'Segoe UI', system-ui, sans-serif; }
+        canvas { display: block; }
+
+        #ui {
+            position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none; z-index: 10;
+        }
+        #hud {
+            position: absolute; top: 15px; left: 15px; right: 15px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        #score {
+            font-size: 1.6rem; color: #0ff; font-weight: 700;
+            text-shadow: 0 0 10px #0ff;
+        }
+        #level {
+            font-size: 1.2rem; color: #f0f; font-weight: 700;
+            text-shadow: 0 0 10px #f0f;
+        }
+        #health-bar {
+            width: 160px; height: 14px;
+            border: 2px solid #f0f; border-radius: 7px;
+            overflow: hidden; background: rgba(0,0,0,0.5);
+        }
+        #health-fill {
+            width: 100%; height: 100%;
+            background: linear-gradient(90deg, #f0f, #f6f);
+            transition: width 0.3s;
+        }
+        #boss-bar-wrap {
+            position: absolute; top: 50px; left: 50%; transform: translateX(-50%);
+            width: 300px; text-align: center; display: none;
+        }
+        #boss-label {
+            font-size: 0.9rem; color: #f44; margin-bottom: 4px;
+            text-shadow: 0 0 8px #f44;
+        }
+        #boss-bar {
+            width: 100%; height: 12px;
+            border: 2px solid #f44; border-radius: 6px;
+            overflow: hidden; background: rgba(0,0,0,0.5);
+        }
+        #boss-fill {
+            width: 100%; height: 100%;
+            background: linear-gradient(90deg, #f44, #f88);
+            transition: width 0.3s;
+        }
+        #controls-hint {
+            position: absolute; bottom: 20px; left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.85rem; color: #555;
+        }
+
+        .screen {
+            position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            background: rgba(10, 0, 20, 0.92);
+            z-index: 20; pointer-events: auto;
+        }
+        .screen h1 {
+            font-size: 3.2rem; color: #0ff;
+            text-shadow: 0 0 20px #0ff, 0 0 40px #0ff;
+            margin-bottom: 0.3rem;
+        }
+        .screen .sub {
+            font-size: 1.1rem; color: #888; margin-bottom: 1rem;
+        }
+        .screen .instructions {
+            font-size: 0.95rem; color: #aaf; max-width: 420px;
+            text-align: center; line-height: 1.6; margin-bottom: 1.5rem;
+        }
+        .screen .instructions strong { color: #0ff; }
+        .screen .start-text {
+            font-size: 1.2rem; color: #f0f;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        .screen .final-score {
+            font-size: 2rem; color: #0ff; margin-bottom: 1rem;
+        }
+        .screen .win-msg {
+            font-size: 1.5rem; color: #0f0; margin-bottom: 0.5rem;
+            text-shadow: 0 0 10px #0f0;
+        }
+        .screen button {
+            padding: 0.8rem 2.5rem; font-size: 1.1rem;
+            border: 2px solid #0ff; background: transparent;
+            color: #0ff; border-radius: 8px; cursor: pointer;
+            transition: background 0.2s; pointer-events: auto;
+        }
+        .screen button:hover { background: rgba(0,255,255,0.15); }
+        .credit {
+            position: absolute; bottom: 20px;
+            font-size: 0.8rem; color: #444;
+        }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .hidden { display: none !important; }
+
+        /* Mobile Controls */
+        #mobile-controls {
+            display: none; position: fixed; bottom: 0; left: 0;
+            width: 100%; z-index: 15; pointer-events: none;
+        }
+        .dpad {
+            position: absolute; bottom: 20px; left: 20px;
+            width: 150px; height: 150px;
+        }
+        .dpad .touch-btn {
+            position: absolute; width: 48px; height: 48px;
+            border-radius: 10px; border: 2px solid rgba(255,255,255,0.3);
+            background: rgba(255,255,255,0.1);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.3rem; color: rgba(255,255,255,0.5);
+            user-select: none; -webkit-user-select: none;
+            pointer-events: auto;
+        }
+        .dpad .touch-btn:active, .dpad .touch-btn.active {
+            background: rgba(255,255,255,0.25);
+            border-color: rgba(255,255,255,0.6);
+        }
+        #btn-up { top: 0; left: 50%; transform: translateX(-50%); }
+        #btn-down { bottom: 0; left: 50%; transform: translateX(-50%); }
+        #btn-left { top: 50%; left: 0; transform: translateY(-50%); }
+        #btn-right { top: 50%; right: 0; transform: translateY(-50%); }
+        .action-btns {
+            position: absolute; bottom: 30px; right: 20px;
+            display: flex; gap: 12px;
+        }
+        .action-btns .touch-btn {
+            width: 60px; height: 60px; border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.3);
+            background: rgba(255,255,255,0.1);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.75rem; color: rgba(255,255,255,0.5);
+            user-select: none; -webkit-user-select: none;
+            pointer-events: auto;
+        }
+        .action-btns .touch-btn:active, .action-btns .touch-btn.active {
+            background: rgba(255,255,255,0.25);
+            border-color: rgba(255,255,255,0.6);
+        }
+        @media (pointer: coarse), (max-width: 768px) {
+            #mobile-controls { display: block; }
+            #controls-hint { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    <div id="hud">
+        <div id="score">Score: 0</div>
+        <div id="level">Level: 1</div>
+        <div id="health-bar"><div id="health-fill"></div></div>
+    </div>
+    <div id="boss-bar-wrap">
+        <div id="boss-label">⚠ BOSS ⚠</div>
+        <div id="boss-bar"><div id="boss-fill"></div></div>
+    </div>
+    <div id="controls-hint">WASD / Arrows to move · SPACE to jump · F to shoot</div>
+</div>
+
+<div id="mobile-controls">
+    <div class="dpad">
+        <div class="touch-btn" id="btn-up">▲</div>
+        <div class="touch-btn" id="btn-down">▼</div>
+        <div class="touch-btn" id="btn-left">◀</div>
+        <div class="touch-btn" id="btn-right">▶</div>
+    </div>
+    <div class="action-btns">
+        <div class="touch-btn" id="btn-shoot">FIRE</div>
+        <div class="touch-btn" id="btn-jump">JUMP</div>
+    </div>
+</div>
+
+<div id="title-screen" class="screen">
+    <h1>CYBER COOL</h1>
+    <p class="sub">A Cyberpunk Platformer</p>
+    <div class="instructions">
+        Navigate floating platforms in a neon city arena.<br>
+        Collect <strong>data orbs</strong> to score points.<br>
+        At <strong>50 points</strong> the boss appears — shoot it down!<br><br>
+        <strong>Move:</strong> WASD / Arrow Keys &nbsp; <strong>Jump:</strong> SPACE<br>
+        <strong>Shoot:</strong> F key &nbsp; <strong>Mobile:</strong> On-screen buttons
+    </div>
+    <p class="start-text">Press SPACE or Tap to Start</p>
+    <p class="credit">Made by coolest — NCWIT Indiana AIC Awards</p>
+</div>
+
+<div id="gameover-screen" class="screen hidden">
+    <h1 id="end-title">GAME OVER</h1>
+    <p class="win-msg hidden" id="win-msg">Boss Defeated!</p>
+    <p class="final-score" id="final-score">Score: 0</p>
+    <button id="restart-btn">Play Again</button>
+    <p class="credit">Made by coolest — NCWIT Indiana AIC Awards</p>
+</div>
+
+<script>
+// =============================================================
+// CONFIG
+// =============================================================
+const CONFIG = {
+    moveSpeed: 0.14,
+    jumpForce: 0.36,
+    gravity: -0.018,
+    shootCooldown: 15,
+    bulletSpeed: 0.35,
+    orbSpawnInterval: 180,
+    bossThreshold: 50,
+    bossHP: 15,
+    bossProjectileRate: 140,
+    playerMaxHP: 5,
+    colors: {
+        bg: 0x0a0014,
+        platform: 0x1a0a3a,
+        platformEdge: 0x6600cc,
+        player: 0x00ffff,
+        orb: 0x00ff88,
+        bullet: 0x00ffff,
+        boss: 0xff2244,
+        bossProjectile: 0xff4466,
+        building: 0x0d0d2b,
+        neonPink: 0xff00ff,
+        neonBlue: 0x0088ff,
+        window: 0x223355,
+        windowLit: 0xffcc00,
+        enemy: 0xff6600,
+    },
+    enemySpeed: 0.04,
+    enemySpawnInterval: 300,
+    maxEnemies: 6,
+};
+
+// =============================================================
+// THREE.JS SETUP
+// =============================================================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(CONFIG.colors.bg);
+scene.fog = new THREE.FogExp2(CONFIG.colors.bg, 0.025);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 200);
+camera.position.set(0, 18, 22);
+camera.lookAt(0, 0, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+// Lighting
+scene.add(new THREE.AmbientLight(0x221144, 0.5));
+const dirLight = new THREE.DirectionalLight(0x8866ff, 0.6);
+dirLight.position.set(5, 15, 8);
+dirLight.castShadow = true;
+scene.add(dirLight);
+
+const neonLight1 = new THREE.PointLight(0xff00ff, 1.5, 30);
+neonLight1.position.set(-8, 6, -8);
+scene.add(neonLight1);
+const neonLight2 = new THREE.PointLight(0x0088ff, 1.5, 30);
+neonLight2.position.set(8, 6, 8);
+scene.add(neonLight2);
+
+// =============================================================
+// CYBERPUNK CITY BACKGROUND
+// =============================================================
+function createBuilding(x, z, w, h, d) {
+    const geo = new THREE.BoxGeometry(w, h, d);
+    const mat = new THREE.MeshStandardMaterial({
+        color: CONFIG.colors.building, roughness: 0.9, metalness: 0.1
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, h / 2 - 2, z);
+    mesh.castShadow = true;
+    scene.add(mesh);
+
+    // Neon edge lines
+    const edges = new THREE.EdgesGeometry(geo);
+    const lineColor = Math.random() > 0.5 ? CONFIG.colors.neonPink : CONFIG.colors.neonBlue;
+    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: lineColor, transparent: true, opacity: 0.3 }));
+    line.position.copy(mesh.position);
+    scene.add(line);
+
+    // Windows
+    const windowRows = Math.floor(h / 1.5);
+    const windowCols = Math.floor(w / 1.2);
+    for (let r = 0; r < windowRows; r++) {
+        for (let c = 0; c < windowCols; c++) {
+            if (Math.random() > 0.6) continue;
+            const wGeo = new THREE.PlaneGeometry(0.4, 0.5);
+            const lit = Math.random() > 0.5;
+            const wMat = new THREE.MeshBasicMaterial({
+                color: lit ? CONFIG.colors.windowLit : CONFIG.colors.window,
+                transparent: true, opacity: lit ? 0.8 : 0.3,
+                side: THREE.DoubleSide
+            });
+            const wMesh = new THREE.Mesh(wGeo, wMat);
+            const wx = x - w / 2 + 0.6 + c * 1.2;
+            const wy = mesh.position.y - h / 2 + 1 + r * 1.5;
+            wMesh.position.set(wx, wy, z + d / 2 + 0.01);
+            scene.add(wMesh);
+        }
+    }
+}
+
+// Surround the arena with buildings
+const buildingPositions = [
+    [-16, -12, 3, 18, 3], [-16, 0, 4, 14, 3], [-16, 10, 3, 22, 3],
+    [16, -12, 3, 16, 3], [16, 0, 4, 20, 3], [16, 10, 3, 15, 3],
+    [-8, -18, 4, 12, 3], [0, -18, 5, 17, 3], [8, -18, 3, 14, 3],
+    [-10, 22, 3, 19, 3], [0, 22, 4, 13, 3], [10, 22, 4, 16, 3],
+];
+buildingPositions.forEach(b => createBuilding(...b));
+
+// Ground plane
+const groundGeo = new THREE.PlaneGeometry(50, 50);
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x050510, roughness: 1 });
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Grid
+const grid = new THREE.GridHelper(50, 50, 0x1a0a3a, 0x110822);
+grid.position.y = -1.99;
+scene.add(grid);
+
+// =============================================================
+// PLATFORMS
+// =============================================================
+const platforms = [];
+const platformData = [
+    // Ground level - large starting platform
+    { x: 0, y: 0, z: 0, w: 6, d: 6 },
+    // Tier 1 - easy jumps, close and low
+    { x: -4, y: 0.8, z: -3, w: 4, d: 4 },
+    { x: 4, y: 0.8, z: -3, w: 4, d: 4 },
+    { x: -4, y: 0.8, z: 3, w: 4, d: 4 },
+    { x: 4, y: 0.8, z: 3, w: 4, d: 4 },
+    // Tier 2 - moderate jumps
+    { x: 0, y: 2, z: -5, w: 4, d: 3.5 },
+    { x: -6, y: 2, z: 0, w: 3.5, d: 3.5 },
+    { x: 6, y: 2, z: 0, w: 3.5, d: 3.5 },
+    { x: 0, y: 2, z: 5, w: 4, d: 3.5 },
+    // Tier 3 - higher platforms
+    { x: -4, y: 3.5, z: -5, w: 3, d: 3 },
+    { x: 4, y: 3.5, z: -5, w: 3, d: 3 },
+    { x: 0, y: 5, z: 0, w: 4, d: 4 },
+];
+
+platformData.forEach(p => {
+    const geo = new THREE.BoxGeometry(p.w, 0.4, p.d);
+    const mat = new THREE.MeshStandardMaterial({
+        color: CONFIG.colors.platform, roughness: 0.6, metalness: 0.4
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(p.x, p.y, p.z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+
+    // Glowing edge
+    const edgeGeo = new THREE.EdgesGeometry(geo);
+    const edgeMat = new THREE.LineBasicMaterial({ color: CONFIG.colors.platformEdge, transparent: true, opacity: 0.6 });
+    const edgeLine = new THREE.LineSegments(edgeGeo, edgeMat);
+    edgeLine.position.copy(mesh.position);
+    scene.add(edgeLine);
+
+    platforms.push({ mesh, w: p.w, d: p.d, y: p.y });
+});
+
+// Store base platform heights for leveling up
+const basePlatformY = platformData.map(p => p.y);
+
+// =============================================================
+// PLAYER
+// =============================================================
+const playerGroup = new THREE.Group();
+const playerGeo = new THREE.BoxGeometry(0.7, 1.0, 0.7);
+const playerMat = new THREE.MeshStandardMaterial({
+    color: CONFIG.colors.player, emissive: CONFIG.colors.player,
+    emissiveIntensity: 0.4, roughness: 0.3, metalness: 0.7
+});
+const playerMesh = new THREE.Mesh(playerGeo, playerMat);
+playerMesh.castShadow = true;
+playerGroup.add(playerMesh);
+
+// Player glow
+const glowLight = new THREE.PointLight(CONFIG.colors.player, 0.8, 6);
+glowLight.position.set(0, 0.5, 0);
+playerGroup.add(glowLight);
+
+playerGroup.position.set(0, 1, 0);
+scene.add(playerGroup);
+
+// =============================================================
+// GAME STATE
+// =============================================================
+let gameState = 'title';
+let score = 0;
+let frame = 0;
+let playerHP = CONFIG.playerMaxHP;
+let velY = 0;
+let onGround = false;
+let coyoteTimer = 0;
+let jumpBufferTimer = 0;
+let shootTimer = 0;
+let invulnTimer = 0;
+let level = 1;
+let nextBossScore = CONFIG.bossThreshold;
+
+const bullets = [];
+const orbs = [];
+const enemies = [];
+const bossProjectiles = [];
+const particles = [];
+
+let boss = null;
+let bossHP = 0;
+let bossActive = false;
+let bossAngle = 0;
+let bossShootTimer = 0;
+let bossDefeated = false;
+
+// =============================================================
+// INPUT
+// =============================================================
+const keys = {};
+window.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if (e.code === 'Space') {
+        e.preventDefault();
+        if (gameState === 'title') startGame();
+    }
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+document.getElementById('restart-btn').addEventListener('click', startGame);
+document.getElementById('title-screen').addEventListener('click', () => { if (gameState === 'title') startGame(); });
+document.getElementById('title-screen').addEventListener('touchend', e => { e.preventDefault(); if (gameState === 'title') startGame(); });
+
+// Touch controls
+const touchState = { left: false, right: false, up: false, down: false, jump: false, shoot: false };
+function bindTouch(id, key) {
+    const el = document.getElementById(id);
+    el.addEventListener('touchstart', e => { e.preventDefault(); touchState[key] = true; el.classList.add('active'); }, { passive: false });
+    el.addEventListener('touchend', e => { e.preventDefault(); touchState[key] = false; el.classList.remove('active'); }, { passive: false });
+    el.addEventListener('touchcancel', () => { touchState[key] = false; el.classList.remove('active'); });
+}
+bindTouch('btn-up', 'up');
+bindTouch('btn-down', 'down');
+bindTouch('btn-left', 'left');
+bindTouch('btn-right', 'right');
+bindTouch('btn-jump', 'jump');
+bindTouch('btn-shoot', 'shoot');
+
+// =============================================================
+// AUDIO
+// =============================================================
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playSound(freq, dur, type = 'square') {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + dur);
+}
+
+// =============================================================
+// GAME FUNCTIONS
+// =============================================================
+function startGame() {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    score = 0; frame = 0; playerHP = CONFIG.playerMaxHP;
+    velY = 0; onGround = false; coyoteTimer = 0; jumpBufferTimer = 0; shootTimer = 0; invulnTimer = 0;
+    bossActive = false; bossDefeated = false; bossAngle = 0; bossShootTimer = 0;
+    level = 1; nextBossScore = CONFIG.bossThreshold;
+
+    // Reset platforms to base heights
+    for (let i = 0; i < platforms.length; i++) {
+        platformData[i].y = basePlatformY[i];
+        platforms[i].y = basePlatformY[i];
+        platforms[i].mesh.position.y = basePlatformY[i];
+    }
+
+    playerGroup.position.set(0, 1, 0);
+
+    // Clear all dynamic objects
+    [...bullets, ...orbs, ...enemies, ...bossProjectiles, ...particles].forEach(o => scene.remove(o));
+    bullets.length = 0; orbs.length = 0; enemies.length = 0; bossProjectiles.length = 0; particles.length = 0;
+
+    if (boss) { scene.remove(boss); boss = null; }
+
+    updateHUD();
+    document.getElementById('boss-bar-wrap').style.display = 'none';
+    document.getElementById('title-screen').classList.add('hidden');
+    document.getElementById('gameover-screen').classList.add('hidden');
+    document.getElementById('win-msg').classList.add('hidden');
+    document.getElementById('end-title').textContent = 'GAME OVER';
+
+    gameState = 'playing';
+}
+
+function updateHUD() {
+    document.getElementById('score').textContent = `Score: ${score}`;
+    document.getElementById('level').textContent = `Level: ${level}`;
+    document.getElementById('health-fill').style.width = `${(playerHP / CONFIG.playerMaxHP) * 100}%`;
+}
+
+function gameOver(won) {
+    gameState = 'gameover';
+    document.getElementById('final-score').textContent = `Score: ${score}`;
+    if (won) {
+        document.getElementById('end-title').textContent = 'YOU WIN!';
+        document.getElementById('win-msg').classList.remove('hidden');
+        playSound(523, 0.2, 'sine'); setTimeout(() => playSound(659, 0.2, 'sine'), 150);
+        setTimeout(() => playSound(784, 0.4, 'sine'), 300);
+    } else {
+        playSound(150, 0.4, 'sawtooth');
+    }
+    document.getElementById('gameover-screen').classList.remove('hidden');
+    spawnExplosion(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z, CONFIG.colors.player);
+}
+
+function takeDamage() {
+    if (invulnTimer > 0) return;
+    playerHP--;
+    invulnTimer = 60;
+    playSound(200, 0.2, 'sawtooth');
+    updateHUD();
+    if (playerHP <= 0) gameOver(false);
+}
+
+// --- ORB SPAWNING ---
+function spawnOrb() {
+    const plat = platformData[Math.floor(Math.random() * platformData.length)];
+    const geo = new THREE.SphereGeometry(0.3, 12, 12);
+    const mat = new THREE.MeshStandardMaterial({
+        color: CONFIG.colors.orb, emissive: CONFIG.colors.orb,
+        emissiveIntensity: 0.6, transparent: true, opacity: 0.9
+    });
+    const orb = new THREE.Mesh(geo, mat);
+    orb.position.set(
+        plat.x + (Math.random() - 0.5) * (plat.w - 1),
+        plat.y + 1.2,
+        plat.z + (Math.random() - 0.5) * (plat.d - 1)
+    );
+    scene.add(orb);
+    orbs.push(orb);
+}
+
+// --- ENEMIES ---
+function spawnEnemy() {
+    // Pick a random platform (not the ground one)
+    const idx = 1 + Math.floor(Math.random() * (platformData.length - 1));
+    const plat = platformData[idx];
+    const geo = new THREE.ConeGeometry(0.4, 0.9, 6);
+    const mat = new THREE.MeshStandardMaterial({
+        color: CONFIG.colors.enemy, emissive: CONFIG.colors.enemy,
+        emissiveIntensity: 0.4, roughness: 0.4, metalness: 0.5
+    });
+    const enemy = new THREE.Mesh(geo, mat);
+    enemy.position.set(plat.x, plat.y + 0.7, plat.z);
+    enemy.userData.platIdx = idx;
+    enemy.userData.dir = new THREE.Vector3((Math.random() - 0.5), 0, (Math.random() - 0.5)).normalize();
+    enemy.userData.changeTimer = 60 + Math.floor(Math.random() * 120);
+    enemy.castShadow = true;
+    scene.add(enemy);
+    enemies.push(enemy);
+}
+
+// --- BULLETS ---
+function shootBullet() {
+    if (shootTimer > 0) return;
+    shootTimer = CONFIG.shootCooldown;
+    const geo = new THREE.SphereGeometry(0.15, 6, 6);
+    const mat = new THREE.MeshBasicMaterial({ color: CONFIG.colors.bullet });
+    const bullet = new THREE.Mesh(geo, mat);
+    bullet.position.copy(playerGroup.position);
+    bullet.position.y += 0.5;
+
+    // Shoot towards nearest enemy/boss, or forward if none
+    let dir = new THREE.Vector3(0, 0.2, -1).normalize();
+    let nearestDist = Infinity;
+    let nearestTarget = null;
+    enemies.forEach(e => {
+        const d = bullet.position.distanceTo(e.position);
+        if (d < nearestDist) { nearestDist = d; nearestTarget = e; }
+    });
+    if (bossActive && boss) {
+        const d = bullet.position.distanceTo(boss.position);
+        if (d < nearestDist) { nearestTarget = boss; }
+    }
+    if (nearestTarget) {
+        dir = new THREE.Vector3().subVectors(nearestTarget.position, bullet.position).normalize();
+    }
+    bullet.userData.vel = dir.multiplyScalar(CONFIG.bulletSpeed);
+    bullet.userData.life = 120;
+    scene.add(bullet);
+    bullets.push(bullet);
+    playSound(1200, 0.08, 'sine');
+}
+
+// --- BOSS ---
+function spawnBoss() {
+    bossActive = true;
+    bossHP = CONFIG.bossHP;
+    const geo = new THREE.DodecahedronGeometry(1.2, 0);
+    const mat = new THREE.MeshStandardMaterial({
+        color: CONFIG.colors.boss, emissive: CONFIG.colors.boss,
+        emissiveIntensity: 0.5, roughness: 0.4, metalness: 0.6
+    });
+    boss = new THREE.Mesh(geo, mat);
+    // Start on the top center platform
+    const topPlat = platformData[platformData.length - 1];
+    boss.position.set(topPlat.x, topPlat.y + 1.5, topPlat.z);
+    boss.userData.platIdx = platformData.length - 1;
+    boss.userData.moveTimer = 0;
+    boss.userData.targetPlat = null;
+    boss.castShadow = true;
+    scene.add(boss);
+
+    document.getElementById('boss-bar-wrap').style.display = 'block';
+    updateBossBar();
+    playSound(100, 0.6, 'sawtooth');
+}
+
+function updateBossBar() {
+    document.getElementById('boss-fill').style.width = `${(bossHP / CONFIG.bossHP) * 100}%`;
+}
+
+function bossShoot() {
+    const geo = new THREE.SphereGeometry(0.25, 6, 6);
+    const mat = new THREE.MeshBasicMaterial({ color: CONFIG.colors.bossProjectile });
+    const proj = new THREE.Mesh(geo, mat);
+    proj.position.copy(boss.position);
+    const dir = new THREE.Vector3().subVectors(playerGroup.position, boss.position).normalize();
+    proj.userData.vel = dir.multiplyScalar(0.1);
+    proj.userData.life = 150;
+    scene.add(proj);
+    bossProjectiles.push(proj);
+    playSound(300, 0.1, 'square');
+}
+
+// --- PARTICLES ---
+function spawnExplosion(x, y, z, color) {
+    for (let i = 0; i < 15; i++) {
+        const geo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+        const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
+        const p = new THREE.Mesh(geo, mat);
+        p.position.set(x, y, z);
+        p.userData.vel = new THREE.Vector3((Math.random()-0.5)*0.3, Math.random()*0.25, (Math.random()-0.5)*0.3);
+        p.userData.life = 1;
+        scene.add(p);
+        particles.push(p);
+    }
+}
+
+// --- COLLISION ---
+function dist3(a, b) {
+    return a.position.distanceTo(b.position);
+}
+
+function playerOnPlatform() {
+    const px = playerGroup.position.x;
+    const py = playerGroup.position.y;
+    const pz = playerGroup.position.z;
+
+    for (const plat of platforms) {
+        const top = plat.y + 0.2;
+        // Wider vertical detection window so player doesn't fall through
+        if (py >= top - 0.3 && py <= top + 0.7 && velY <= 0) {
+            const hw = plat.w / 2 + 0.35;
+            const hd = plat.d / 2 + 0.35;
+            const dx = Math.abs(px - plat.mesh.position.x);
+            const dz = Math.abs(pz - plat.mesh.position.z);
+            if (dx < hw && dz < hd) {
+                return top + 0.5;
+            }
+        }
+    }
+    return null;
+}
+
+// =============================================================
+// GAME LOOP
+// =============================================================
+function animate() {
+    requestAnimationFrame(animate);
+
+    if (gameState === 'playing') {
+        frame++;
+        if (shootTimer > 0) shootTimer--;
+        if (invulnTimer > 0) invulnTimer--;
+
+        // --- Player Movement (all directions) ---
+        const spd = CONFIG.moveSpeed;
+        if (keys['ArrowLeft'] || keys['KeyA'] || touchState.left) playerGroup.position.x -= spd;
+        if (keys['ArrowRight'] || keys['KeyD'] || touchState.right) playerGroup.position.x += spd;
+        if (keys['ArrowUp'] || keys['KeyW'] || touchState.up) playerGroup.position.z -= spd;
+        if (keys['ArrowDown'] || keys['KeyS'] || touchState.down) playerGroup.position.z += spd;
+
+        // Jump buffer — remember jump press for a few frames
+        if (keys['Space'] || touchState.jump) {
+            jumpBufferTimer = 8;
+        } else {
+            if (jumpBufferTimer > 0) jumpBufferTimer--;
+        }
+
+        // Jump (with coyote time + jump buffer)
+        if (jumpBufferTimer > 0 && (onGround || coyoteTimer > 0)) {
+            velY = CONFIG.jumpForce;
+            onGround = false;
+            coyoteTimer = 0;
+            jumpBufferTimer = 0;
+            playSound(400, 0.1, 'sine');
+        }
+
+        // Shoot
+        if (keys['KeyF'] || touchState.shoot) shootBullet();
+
+        // Gravity
+        velY += CONFIG.gravity;
+        playerGroup.position.y += velY;
+
+        // Platform collision
+        const platY = playerOnPlatform();
+        if (platY !== null) {
+            playerGroup.position.y = platY;
+            velY = 0;
+            onGround = true;
+            coyoteTimer = 6; // allow jumping shortly after leaving a platform edge
+        } else {
+            if (onGround) coyoteTimer = 6;
+            onGround = false;
+            if (coyoteTimer > 0) coyoteTimer--;
+        }
+
+        // Fall death
+        if (playerGroup.position.y < -5) takeDamage(), playerGroup.position.set(0, 3, 0), velY = 0;
+
+        // Clamp to arena
+        playerGroup.position.x = Math.max(-10, Math.min(10, playerGroup.position.x));
+        playerGroup.position.z = Math.max(-10, Math.min(10, playerGroup.position.z));
+
+        // Invuln flash
+        playerMesh.visible = invulnTimer > 0 ? frame % 6 < 3 : true;
+
+        // --- Orbs ---
+        if (frame % CONFIG.orbSpawnInterval === 0 && orbs.length < 5) spawnOrb();
+        for (let i = orbs.length - 1; i >= 0; i--) {
+            const orb = orbs[i];
+            orb.rotation.y += 0.03;
+            orb.position.y += Math.sin(frame * 0.05 + i) * 0.005;
+            if (dist3(playerGroup, orb) < 1) {
+                scene.remove(orb);
+                orbs.splice(i, 1);
+                score += 5;
+                updateHUD();
+                playSound(800, 0.1, 'sine');
+                spawnExplosion(orb.position.x, orb.position.y, orb.position.z, CONFIG.colors.orb);
+
+                // Boss trigger
+                if (score >= nextBossScore && !bossActive) spawnBoss();
+            }
+        }
+
+        // --- Enemies ---
+        if (frame % CONFIG.enemySpawnInterval === 0 && enemies.length < CONFIG.maxEnemies) spawnEnemy();
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            const e = enemies[i];
+            const plat = platformData[e.userData.platIdx];
+            // Patrol on platform
+            e.position.x += e.userData.dir.x * CONFIG.enemySpeed;
+            e.position.z += e.userData.dir.z * CONFIG.enemySpeed;
+            e.rotation.y += 0.04;
+            // Stay on platform
+            const hw = plat.w / 2 - 0.5;
+            const hd = plat.d / 2 - 0.5;
+            if (Math.abs(e.position.x - plat.x) > hw || Math.abs(e.position.z - plat.z) > hd) {
+                e.userData.dir.negate();
+                e.position.x = THREE.MathUtils.clamp(e.position.x, plat.x - hw, plat.x + hw);
+                e.position.z = THREE.MathUtils.clamp(e.position.z, plat.z - hd, plat.z + hd);
+            }
+            e.userData.changeTimer--;
+            if (e.userData.changeTimer <= 0) {
+                e.userData.dir = new THREE.Vector3((Math.random()-0.5), 0, (Math.random()-0.5)).normalize();
+                e.userData.changeTimer = 60 + Math.floor(Math.random() * 120);
+            }
+            // Enemy touches player
+            if (dist3(playerGroup, e) < 1) {
+                takeDamage();
+            }
+        }
+
+        // --- Bullets ---
+        for (let i = bullets.length - 1; i >= 0; i--) {
+            const b = bullets[i];
+            b.position.add(b.userData.vel);
+            b.userData.life--;
+            if (b.userData.life <= 0) { scene.remove(b); bullets.splice(i, 1); continue; }
+
+            // Hit enemy
+            let bulletUsed = false;
+            for (let j = enemies.length - 1; j >= 0; j--) {
+                if (dist3(b, enemies[j]) < 1) {
+                    spawnExplosion(enemies[j].position.x, enemies[j].position.y, enemies[j].position.z, CONFIG.colors.enemy);
+                    scene.remove(enemies[j]); enemies.splice(j, 1);
+                    scene.remove(b); bullets.splice(i, 1);
+                    score += 3;
+                    updateHUD();
+                    playSound(600, 0.1, 'square');
+                if (score >= nextBossScore && !bossActive) spawnBoss();
+                    bulletUsed = true;
+                    break;
+                }
+            }
+            if (bulletUsed) continue;
+
+            // Hit boss
+            if (bossActive && boss && dist3(b, boss) < 2) {
+                scene.remove(b); bullets.splice(i, 1);
+                bossHP--;
+                updateBossBar();
+                spawnExplosion(b.position.x, b.position.y, b.position.z, CONFIG.colors.boss);
+                playSound(500, 0.1, 'square');
+                if (bossHP <= 0) {
+                    spawnExplosion(boss.position.x, boss.position.y, boss.position.z, CONFIG.colors.boss);
+                    scene.remove(boss); boss = null;
+                    bossActive = false; bossDefeated = false;
+                    document.getElementById('boss-bar-wrap').style.display = 'none';
+                    score += 50;
+                    level++;
+                    nextBossScore = score + CONFIG.bossThreshold;
+
+                    // Raise all platforms
+                    const lift = 1.5;
+                    for (let pi = 0; pi < platforms.length; pi++) {
+                        platformData[pi].y += lift;
+                        platforms[pi].y += lift;
+                        platforms[pi].mesh.position.y += lift;
+                    }
+
+                    // Heal player a bit
+                    playerHP = Math.min(playerHP + 2, CONFIG.playerMaxHP);
+                    updateHUD();
+                    playSound(523, 0.2, 'sine');
+                    setTimeout(() => playSound(659, 0.2, 'sine'), 150);
+                    setTimeout(() => playSound(784, 0.4, 'sine'), 300);
+                }
+            }
+        }
+
+        // --- Boss AI --- (hops between platforms)
+        if (bossActive && boss) {
+            boss.rotation.x += 0.02;
+            boss.rotation.y += 0.03;
+
+            // Move toward target platform
+            boss.userData.moveTimer--;
+            if (boss.userData.moveTimer <= 0 || !boss.userData.targetPlat) {
+                // Pick a new random platform
+                const idx = Math.floor(Math.random() * platformData.length);
+                boss.userData.targetPlat = platformData[idx];
+                boss.userData.moveTimer = 180 + Math.floor(Math.random() * 120);
+            }
+            const tp = boss.userData.targetPlat;
+            const tx = tp.x, tz = tp.z, ty = tp.y + 1.5;
+            boss.position.x += (tx - boss.position.x) * 0.02;
+            boss.position.z += (tz - boss.position.z) * 0.02;
+            boss.position.y += (ty - boss.position.y) * 0.02;
+
+            bossShootTimer++;
+            if (bossShootTimer >= CONFIG.bossProjectileRate) {
+                bossShootTimer = 0;
+                bossShoot();
+            }
+        }
+
+        // --- Boss projectiles ---
+        for (let i = bossProjectiles.length - 1; i >= 0; i--) {
+            const p = bossProjectiles[i];
+            p.position.add(p.userData.vel);
+            p.userData.life--;
+            if (p.userData.life <= 0) { scene.remove(p); bossProjectiles.splice(i, 1); continue; }
+            if (dist3(playerGroup, p) < 0.8) {
+                scene.remove(p); bossProjectiles.splice(i, 1);
+                takeDamage();
+            }
+        }
+
+        // --- Camera follow ---
+        const camTarget = new THREE.Vector3(
+            playerGroup.position.x * 0.3,
+            Math.max(playerGroup.position.y + 12, 14),
+            playerGroup.position.z + 18
+        );
+        camera.position.lerp(camTarget, 0.04);
+        camera.lookAt(playerGroup.position.x * 0.5, playerGroup.position.y + 2, playerGroup.position.z);
+    }
+
+    // --- Particles ---
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.position.add(p.userData.vel);
+        p.userData.vel.y -= 0.005;
+        p.userData.life -= 0.025;
+        p.material.opacity = Math.max(0, p.userData.life);
+        if (p.userData.life <= 0) { scene.remove(p); particles.splice(i, 1); }
+    }
+
+    // Title sway
+    if (gameState === 'title') {
+        camera.position.x = Math.sin(Date.now() * 0.0005) * 2;
+        camera.position.y = 14 + Math.sin(Date.now() * 0.0008) * 1;
+        camera.lookAt(0, 3, 0);
+    }
+
+    // Neon light pulse
+    neonLight1.intensity = 1.5 + Math.sin(Date.now() * 0.003) * 0.5;
+    neonLight2.intensity = 1.5 + Math.cos(Date.now() * 0.003) * 0.5;
+
+    renderer.render(scene, camera);
+}
+
+// =============================================================
+// RESIZE
+// =============================================================
+window.addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+});
+
+animate();
+</script>
+</body>
+</html>
