@@ -346,12 +346,12 @@
             .header { margin-bottom: 28px; }
             .header::after { margin: 16px auto 0; height: 4px; }
 
-            h1 {
-                -webkit-text-fill-color: #1a1a2e;
-                background: none;
-                color: #1a1a2e;
-                font-size: 56pt;
-                margin-bottom: 8px;
+            .header h1 {
+                -webkit-text-fill-color: #1a1a2e !important;
+                background: none !important;
+                color: #1a1a2e !important;
+                font-size: 96pt !important;
+                margin-bottom: 16px;
             }
 
             .badge {
@@ -362,17 +362,9 @@
                 margin-bottom: 12px;
             }
 
-            .subtitle { color: #444; font-size: 20pt; line-height: 1.4; }
+            .subtitle { color: #444; font-size: 28pt; line-height: 1.4; max-width: 90%; margin: 0 auto; }
 
-            .intro-callout {
-                background: #f0f0fa;
-                border: 2px solid #6c5ce7;
-                font-size: 15pt;
-                padding: 18px 26px;
-                margin-bottom: 24px;
-                line-height: 1.5;
-            }
-            .intro-callout strong { color: #1a1a2e; }
+            .intro-callout { display: none !important; }
 
             .card {
                 border: 2px solid #999;
@@ -473,14 +465,14 @@
         <div class="badge">Prompt Engineering Showcase</div>
         <h1>Behind the Prompt</h1>
         <p class="subtitle">
-            Students answered six questions and walked away with their own playable 3D games.
-            This poster shows the instructions and guardrails that made that possible.
+            Participants answered six questions and walked away with their own playable 3D games.
+            Below shows the instructions and guardrails that made this experience possible.
         </p>
     </div>
 
     <!-- ═══════════ INTRO ═══════════ -->
     <div class="intro-callout">
-        For this activity, students did not start with a blank screen. They answered a few questions,
+        For this activity, participants did not start with a blank screen. They answered a few questions,
         and Copilot built a first playable version of the game. From there, they could test it,
         react to it, and make it their own.
     </div>
@@ -595,9 +587,8 @@ Use the <span class="prop">vscode_askQuestions</span> tool to ask <span class="k
             <h2>Prompt Strategy: Make the Output Legible and Bounded</h2>
 
             <p>
-                Once the inputs are structured, the next prompt-engineering job is to keep the output from
-                becoming bloated, generic, or fragile. These constraints are not just technical rules.
-                They are there to shape the kind of code the model produces.
+                Once the inputs are structured, the next job is keeping the generated code short and
+                predictable. These constraints also shape what Copilot actually writes.
             </p>
 
             <div class="code-block">
@@ -634,7 +625,7 @@ Use the <span class="prop">vscode_askQuestions</span> tool to ask <span class="k
 
             <div class="highlight-box">
                 <strong>Prompt idea:</strong> good constraints do double duty. They simplify the student experience,
-                and they also stop the model from wandering into package setup, multi-file sprawl, or broken browser behavior.
+                and they also stop the model from wandering into package setup, a multi-file sprawl, or broken browser behavior.
             </div>
         </div>
 
@@ -698,31 +689,29 @@ Use at least <span class="value">3-4 primitives per character</span> so the visu
             <div class="card-label">🧠 Repository Memory</div>
             <h2>What We Learned Along the Way</h2>
             <p>
-                Copilot also has a <strong>persistent memory system</strong> for this repository.
-                As we tested the activity, we saved lessons that did not belong in the main skill file:
+                Copilot has <strong>persistent memory</strong> for this repository. As we tested the activity,
+                we saved lessons so the same mistakes never happened twice. Memory lives in two places:
             </p>
 
             <div class="code-block">
-<span class="comment"># Fast-path behavior saved in repository memory</span>
-- <span class="string">/build-my-game</span> must begin with a single <span class="prop">vscode_askQuestions</span> call before any other action.
-- Ask <span class="keyword">ALL</span> questions in <span class="keyword">ONE</span> call, in this exact order and wording.
-- Minimal required files after interview: <span class="string">games/_template/index.html</span> and <span class="string">games/manifest.js</span>.
-- Avoid reading <span class="string">README.md</span>, <span class="string">index.html</span>, and <span class="string">styles.css</span>.
+<span class="comment"># Repo memory — fast-path rules</span>
+- Start with the interview immediately; only read <span class="string">_template/index.html</span> + <span class="string">manifest.js</span>.
+- Ask <span class="keyword">ALL 6 questions in ONE call</span>, exact wording, title last.
+- Manifest is <span class="string">.js</span> (<span class="keyword">NOT</span> .json) — loaded via <span class="string">&lt;script&gt;</span>, no fetch.
 
-<span class="comment"># Game design rules learned from mistakes</span>
-- Do <span class="keyword">NOT</span> default to runner/side-scroller mechanics.
-- Each game must be conceptually unique.
-- Every game must display instructions on the title screen.
-- Every game must support both keyboard controls and on-screen touch controls.
+<span class="comment"># known-issues.md — read before generating, updated when bugs are found</span>
+- <span class="prop">Mobile</span>: title screen must respond to <span class="keyword">tap</span>, not just SPACE; touch controls required.
+- <span class="prop">Camera</span>: decorative buildings must <span class="keyword">not overlap</span> the play area.
+- <span class="prop">Gameplay</span>: no hazards at spawn; every platform must be reachable.
+- <span class="prop">Audio</span>: resume AudioContext on first gesture or browsers block sound.
 
-<span class="comment"># File-format corrections</span>
-- The manifest is <span class="string">games/manifest.js</span> (<span class="keyword">NOT</span> .json).
-- <span class="string">index.html</span> loads manifest.js via <span class="string">&lt;script&gt;</span> (no fetch; works with <span class="string">file://</span> protocol).
+<span class="comment"># Self-healing loop (SKILL.md Step 5)</span>
+When a participant reports a bug → <span class="keyword">append</span> the lesson to <span class="string">known-issues.md</span> → then fix the game.
             </div>
 
             <div class="highlight-box green">
-                <strong>How memory helped:</strong> When we saw the same mistake twice, we saved the fix.
-                That meant the next student started from a better version of the workflow.
+                <strong>How memory helped:</strong> Every new game benefits from bugs we already caught.
+                When a participant finds a problem, we save it as a rule so it doesn't happen again.
             </div>
     </div>
 
@@ -776,14 +765,7 @@ Use at least <span class="value">3-4 primitives per character</span> so the visu
 
     <!-- ═══════════ FOOTER ═══════════ -->
     <div class="footer">
-        <p>NCWIT Indiana AIC Awards Event &bull; Built with GitHub Copilot, simple web tools, and a lot of student choice</p>
-        <div class="tech-stack">
-            <span class="tech-badge">Three.js r128</span>
-            <span class="tech-badge">GitHub Copilot</span>
-            <span class="tech-badge">VS Code Skills</span>
-            <span class="tech-badge">Web Audio API</span>
-            <span class="tech-badge">Zero Dependencies</span>
-        </div>
+        <p>Built with 💜 at SEP</p>
     </div>
 
 </div>

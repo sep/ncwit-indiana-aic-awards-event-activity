@@ -13,6 +13,7 @@ Start the skill with the interview immediately. Do not analyze the entire reposi
 
 Repo fast-path reference: see .github/copilot/skills/build-my-game/build-my-game-fast-path.md.
 
+- **Before generating any game**, read `.github/copilot/skills/build-my-game/known-issues.md` and apply every lesson listed there. This file is a living record of bugs found in previously generated games.
 - Before the interview, rely only on the known repo contract: games live in `games/<participant>/index.html`, the reference template is `games/_template/index.html`, and the registry is `games/manifest.json`.
 - Do not read unrelated files such as `README.md`, `index.html`, or `styles.css` unless the participant explicitly asks to change the arcade site or documentation.
 - After the participant answers, read only the files needed to generate the game and update the manifest.
@@ -196,6 +197,16 @@ After generating the game:
    - "Should we add environmental details — trees, buildings, stars?"
 
 Be enthusiastic and encouraging! This might be their first time coding or using AI — make it magical. ✨
+
+## Step 5: Learn from Issues
+
+When a participant reports a fundamental problem with their generated game (e.g., can't start on mobile, camera blocked by scenery, unreachable platforms, no sound), do the following **before** fixing the game:
+
+1. **Append the lesson** to `.github/copilot/skills/build-my-game/known-issues.md` under the appropriate category (Mobile / Touch, Camera & Visibility, Gameplay, Audio — or create a new category if needed).
+2. Write a concise, actionable rule — not a description of the one-off bug but the general pattern to avoid in all future games.
+3. Then fix the participant's game.
+
+This ensures the same class of mistake is never repeated for the next participant.
 
 ## Important Rules
 - NEVER require npm, node, or any build tools

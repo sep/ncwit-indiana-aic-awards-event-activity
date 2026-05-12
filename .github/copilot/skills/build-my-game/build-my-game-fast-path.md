@@ -19,6 +19,8 @@ Use this as the operational fast path for /build-my-game runs.
 - Do not paraphrase or reword any required interview question text.
 - If the askQuestions dialog is cancelled, do not edit files and retry using the same verbatim questions when the user resumes.
 - Minimal required files after interview: games/_template/index.html and games/manifest.js.
+- **Before generating any game code**, read `.github/copilot/skills/build-my-game/known-issues.md` and follow every rule. This is a living file — new lessons get added whenever a participant reports a fundamental bug.
+- When a participant reports a fundamental issue (e.g., can't start on mobile, view blocked, unreachable area, no audio), **append the lesson** to `known-issues.md` under the right category before fixing the game.
 - Fast-path file references SKILL.md for option lists — do not duplicate them.
 - Avoid reading README.md, index.html, and styles.css unless the user asks to change the arcade site or docs.
 - New participant games live at games/<filesystem-safe-name>/index.html.
