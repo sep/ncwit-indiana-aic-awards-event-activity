@@ -46,3 +46,7 @@ fundamental issue, add it here so future games avoid the same mistake.
 - **AudioContext must be resumed on first user gesture** (`if (audioCtx.state
   === 'suspended') audioCtx.resume();` inside the `startGame()` handler),
   otherwise browsers silently block all sound.
+- **Background music must use midrange notes or a melody loop, not a single
+  low-frequency oscillator.** Avoid ambient tracks that sit around sub-bass
+  frequencies (for example ~80 Hz sawtooth only), because they read as rumble
+  instead of music on laptop speakers.
