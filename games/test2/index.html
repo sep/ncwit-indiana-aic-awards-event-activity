@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>test2 — Underwater Dodge</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #001a2e; font-family: 'Segoe UI', system-ui, sans-serif; }
+        canvas { display: block; }
+
+        #ui {
+            position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none; z-index: 10;
+        }
+        #score {
+            position: absolute; top: 20px; right: 20px;
+            font-size: 2rem; color: #00e5ff; font-weight: 700;
+            text-shadow: 0 0 10px #00e5ff;
+        }
+        #speed-label {
+            position: absolute; top: 20px; left: 20px;
+            font-size: 1.2rem; color: #4dd0e1;
+            font-weight: 600;
+        }
+        #speed-flash {
+            position: absolute; top: 45%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 2.4rem; color: #fff; font-weight: 900;
+            text-shadow: 0 0 20px #00e5ff;
+            opacity: 0; transition: opacity 0.3s;
+            pointer-events: none;
+        }
+        #controls-hint {
+            position: absolute; bottom: 20px; left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.9rem; color: #4dd0e1;
+        }
+        @media (pointer: coarse) { #controls-hint { display: none; } }
+
+        /* Screens */
+        .screen {
+            position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            background: rgba(0, 10, 30, 0.92);
+            z-index: 20; pointer-events: auto;
+        }
+        .screen h1 {
+            font-size: 3rem; color: #00e5ff;
+            text-shadow: 0 0 20px #00e5ff, 0 0 40px #00bcd4;
+            margin-bottom: 0.4rem; text-align: center;
+        }
+        .screen .subtitle {
+            font-size: 1.1rem; color: #80deea;
+            margin-bottom: 1.2rem; text-align: center; max-width: 400px; padding: 0 1rem;
+        }
+        .screen .instructions {
+            font-size: 0.95rem; color: #4dd0e1;
+            text-align: center; margin-bottom: 1.5rem;
+            max-width: 380px; line-height: 1.7; padding: 0 1rem;
+        }
+        .screen .start-text {
+            font-size: 1.3rem; color: #e040fb;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        .screen .final-score {
+            font-size: 2rem; color: #00e5ff; margin-bottom: 1.5rem;
+        }
+        .screen button {
+            padding: 0.9rem 2.5rem; font-size: 1.1rem;
+            background: transparent; border: 2px solid #00e5ff;
+            color: #00e5ff; border-radius: 8px; cursor: pointer;
+            transition: background 0.2s; min-height: 44px;
+        }
+        .screen button:hover { background: rgba(0,229,255,0.15); }
+
+        /* Touch controls */
+        #touch-controls {
+            display: none; position: fixed; bottom: 20px;
+            left: 0; right: 0; justify-content: space-between;
+            padding: 0 30px; z-index: 15; pointer-events: auto;
+        }
+        @media (pointer: coarse) { #touch-controls { display: flex; } }
+        .touch-btn {
+            width: 80px; height: 80px; border-radius: 50%;
+            background: rgba(0,229,255,0.2); border: 2px solid #00e5ff;
+            color: #00e5ff; font-size: 2rem;
+            display: flex; align-items: center; justify-content: center;
+            user-select: none; -webkit-user-select: none;
+        }
+
+        .credit {
+            position: fixed; bottom: 8px; right: 14px;
+            font-size: 0.75rem; color: #37474f; z-index: 5;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- HUD -->
+<div id="ui">
+    <div id="score">Score: 0</div>
+    <div id="speed-label">Speed: 1</div>
+    <div id="speed-flash"></div>
+    <div id="controls-hint">← → Arrow Keys or A / D to Move</div>
+</div>
+
+<!-- Touch D-pad -->
+<div id="touch-controls">
+    <div class="touch-btn" id="btn-left">◀</div>
+    <div class="touch-btn" id="btn-right">▶</div>
+</div>
+
+<!-- Title Screen -->
+<div id="title-screen" class="screen">
+    <h1>test2</h1>
+    <div class="subtitle">🌊 Underwater Dodge — Deep Ocean Edition</div>
+    <div class="instructions">
+        🐠 You're a submarine diving deep!<br>
+        🪼 Dodge the jellyfish and sharks falling from above!<br>
+        ⚡ The ocean current speeds up over time!<br><br>
+        ← → Arrow Keys or A / D to steer<br>
+        (On mobile: use the ◀ ▶ buttons)
+    </div>
+    <div class="start-text">Press SPACE or Tap to Start</div>
+</div>
+
+<!-- Game Over Screen -->
+<div id="gameover-screen" class="screen" style="display:none">
+    <h1>💥 Collision!</h1>
+    <div class="subtitle">Your submarine was hit!</div>
+    <div class="final-score" id="final-score-text">Score: 0</div>
+    <button id="restart-btn">Dive Again</button>
+</div>
+
+<div class="credit">Made by test2</div>
+
+<script>
+// ============================================================
+// Scene & Renderer
+// ============================================================
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x001a2e);
+scene.fog = new THREE.FogExp2(0x001225, 0.035);
+
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(0, 0, 14);
+camera.lookAt(0, 0, 0);
+
+// Lighting — cool underwater blues
+const ambient = new THREE.AmbientLight(0x002244, 1.0);
+scene.add(ambient);
+const sun = new THREE.DirectionalLight(0x00bcd4, 1.2);
+sun.position.set(2, 8, 10);
+scene.add(sun);
+const rimLight = new THREE.PointLight(0x00e5ff, 0.8, 40);
+rimLight.position.set(-4, 4, 6);
+scene.add(rimLight);
+
+// ============================================================
+// Play area constants
+// ============================================================
+const PLAY_W = 9;        // player can go x ∈ [-9, 9]
+const PLAYER_Y = -4.5;   // player rests here
+const SPAWN_Y  =  6.2;   // obstacles spawn above camera
+const KILL_Y   = -6.5;   // obstacles removed below this
+
+// ============================================================
+// Seafloor / background plane
+// ============================================================
+const floorGeo = new THREE.PlaneGeometry(30, 6);
+const floorMat = new THREE.MeshPhongMaterial({ color: 0x00334d });
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.position.set(0, -6, -1);
+scene.add(floor);
+
+// Distant coral decorations (outside play area)
+function makeCoral(x, y) {
+    const g = new THREE.Group();
+    const stemGeo = new THREE.CylinderGeometry(0.07, 0.12, 1.0, 8);
+    const mat = new THREE.MeshPhongMaterial({ color: new THREE.Color().setHSL(0.95 + Math.random()*0.1, 0.9, 0.5) });
+    g.add(new THREE.Mesh(stemGeo, mat));
+    const topGeo = new THREE.SphereGeometry(0.25, 8, 8);
+    const top = new THREE.Mesh(topGeo, mat);
+    top.position.y = 0.6;
+    g.add(top);
+    g.position.set(x, y, -3);
+    scene.add(g);
+}
+for (let i = 0; i < 12; i++) {
+    makeCoral(-12 + Math.random() * 2, -5.5 + Math.random() * 0.5);
+    makeCoral( 12 - Math.random() * 2, -5.5 + Math.random() * 0.5);
+}
+
+// ============================================================
+// Player — Submarine
+// ============================================================
+const subGroup = new THREE.Group();
+
+// Main body (horizontal cylinder)
+const subBodyGeo = new THREE.CylinderGeometry(0.42, 0.42, 2.0, 16);
+const subBodyMat = new THREE.MeshPhongMaterial({ color: 0x00bcd4, shininess: 90 });
+const subBody = new THREE.Mesh(subBodyGeo, subBodyMat);
+subBody.rotation.z = Math.PI / 2;
+subGroup.add(subBody);
+
+// Nose cone
+const subNoseGeo = new THREE.ConeGeometry(0.42, 0.7, 16);
+const subNoseMat = new THREE.MeshPhongMaterial({ color: 0x0097a7 });
+const subNose = new THREE.Mesh(subNoseGeo, subNoseMat);
+subNose.rotation.z = -Math.PI / 2;
+subNose.position.x = 1.35;
+subGroup.add(subNose);
+
+// Tail fin
+const subTailGeo = new THREE.BoxGeometry(0.18, 0.75, 0.22);
+const subTailMat = new THREE.MeshPhongMaterial({ color: 0x0097a7 });
+const subTailMesh = new THREE.Mesh(subTailGeo, subTailMat);
+subTailMesh.position.x = -1.1;
+subGroup.add(subTailMesh);
+
+// Periscope
+const subPeriGeo = new THREE.BoxGeometry(0.1, 0.55, 0.1);
+const subPeriMat = new THREE.MeshPhongMaterial({ color: 0x80deea });
+const subPeri = new THREE.Mesh(subPeriGeo, subPeriMat);
+subPeri.position.set(0.2, 0.62, 0);
+subGroup.add(subPeri);
+
+// Porthole
+const portholeGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.05, 16);
+const portholeMat = new THREE.MeshPhongMaterial({ color: 0xfff9c4, emissive: 0x888840, shininess: 120 });
+const porthole = new THREE.Mesh(portholeGeo, portholeMat);
+porthole.rotation.x = Math.PI / 2;
+porthole.position.set(0.5, 0.1, 0.44);
+subGroup.add(porthole);
+
+subGroup.position.set(0, PLAYER_Y, 0);
+scene.add(subGroup);
+
+// ============================================================
+// Bubbles (background ambience)
+// ============================================================
+const bubbles = [];
+function spawnBubble(x, y) {
+    const r = Math.random() * 0.09 + 0.03;
+    const geo = new THREE.SphereGeometry(r, 8, 8);
+    const mat = new THREE.MeshPhongMaterial({
+        color: 0xb2ebf2, transparent: true,
+        opacity: 0.2 + Math.random() * 0.25, shininess: 80
+    });
+    const b = new THREE.Mesh(geo, mat);
+    b.position.set(x ?? (Math.random() - 0.5) * 22, y ?? (Math.random() * 14 - 7), (Math.random() - 0.5) * 5 - 1);
+    b.userData.speed = 0.3 + Math.random() * 0.5;
+    scene.add(b);
+    bubbles.push(b);
+}
+for (let i = 0; i < 70; i++) spawnBubble();
+
+// ============================================================
+// Obstacle factories
+// ============================================================
+const obstacles = [];
+
+function makeJellyfish(xPos) {
+    const g = new THREE.Group();
+    const hue = 0.73 + Math.random() * 0.18;  // purple-pink range
+    const jCol = new THREE.Color().setHSL(hue, 0.9, 0.65);
+    const mat = new THREE.MeshPhongMaterial({ color: jCol, transparent: true, opacity: 0.82, shininess: 80, side: THREE.DoubleSide });
+
+    // Bell (upper half sphere)
+    const bellGeo = new THREE.SphereGeometry(0.55, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2);
+    const bell = new THREE.Mesh(bellGeo, mat);
+    bell.rotation.x = Math.PI;
+    g.add(bell);
+
+    // Inner glow ring
+    const ringGeo = new THREE.TorusGeometry(0.3, 0.05, 6, 20);
+    const ringMat = new THREE.MeshPhongMaterial({ color: jCol, emissive: jCol, emissiveIntensity: 0.5, transparent: true, opacity: 0.6 });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.position.y = -0.18;
+    g.add(ring);
+
+    // Tentacles
+    const tentMat = new THREE.MeshPhongMaterial({ color: jCol, transparent: true, opacity: 0.55 });
+    const tentCount = 6 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < tentCount; i++) {
+        const tentGeo = new THREE.CylinderGeometry(0.02, 0.005, 0.5 + Math.random() * 0.5, 4);
+        const tent = new THREE.Mesh(tentGeo, tentMat);
+        const angle = (i / tentCount) * Math.PI * 2;
+        tent.position.set(Math.cos(angle) * 0.35, -0.65 - Math.random() * 0.2, Math.sin(angle) * 0.35);
+        g.add(tent);
+    }
+
+    g.position.set(xPos, SPAWN_Y, 0);
+    g.userData = { type: 'jellyfish', speed: currentSpeed, wobblePhase: Math.random() * Math.PI * 2 };
+    scene.add(g);
+    obstacles.push(g);
+}
+
+function makeShark(xPos) {
+    const g = new THREE.Group();
+    const sharkMat  = new THREE.MeshPhongMaterial({ color: 0x546e7a, shininess: 50 });
+    const bellyMat  = new THREE.MeshPhongMaterial({ color: 0xeceff1, shininess: 50 });
+    const eyeMat    = new THREE.MeshPhongMaterial({ color: 0x000000 });
+
+    // Body
+    const bGeo = new THREE.SphereGeometry(0.45, 16, 10);
+    const bMesh = new THREE.Mesh(bGeo, sharkMat);
+    bMesh.scale.set(2.2, 0.7, 0.75);
+    g.add(bMesh);
+
+    // Belly
+    const blGeo = new THREE.SphereGeometry(0.38, 14, 8);
+    const blMesh = new THREE.Mesh(blGeo, bellyMat);
+    blMesh.scale.set(1.9, 0.45, 0.65);
+    blMesh.position.y = -0.16;
+    g.add(blMesh);
+
+    // Dorsal fin
+    const dfGeo = new THREE.BoxGeometry(0.32, 0.52, 0.06);
+    const df = new THREE.Mesh(dfGeo, sharkMat);
+    df.position.set(0.15, 0.42, 0);
+    g.add(df);
+
+    // Tail fin
+    const tfGeo = new THREE.BoxGeometry(0.5, 0.38, 0.06);
+    const tf = new THREE.Mesh(tfGeo, sharkMat);
+    tf.position.set(-1.1, 0.05, 0);
+    tf.rotation.z = 0.35;
+    g.add(tf);
+
+    // Pectoral fins
+    for (const side of [-1, 1]) {
+        const pfGeo = new THREE.BoxGeometry(0.35, 0.06, 0.28);
+        const pf = new THREE.Mesh(pfGeo, sharkMat);
+        pf.position.set(0.2, -0.1, side * 0.42);
+        g.add(pf);
+    }
+
+    // Eye
+    const eyeGeo = new THREE.SphereGeometry(0.07, 8, 8);
+    const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+    eyeR.position.set(0.7, 0.12, 0.4);
+    g.add(eyeR);
+
+    g.position.set(xPos, SPAWN_Y, 0);
+    g.userData = { type: 'shark', speed: currentSpeed * 1.25 };
+    scene.add(g);
+    obstacles.push(g);
+}
+
+function spawnObstacle() {
+    const x = (Math.random() - 0.5) * (PLAY_W * 2 - 1);
+    if (Math.random() < 0.55) makeJellyfish(x);
+    else makeShark(x);
+}
+
+// ============================================================
+// Collision
+// ============================================================
+function hitTest(obs) {
+    const dx = subGroup.position.x - obs.position.x;
+    const dy = subGroup.position.y - obs.position.y;
+    return Math.sqrt(dx * dx + dy * dy) < 1.15;
+}
+
+// ============================================================
+// Audio
+// ============================================================
+let audioCtx = null;
+function getAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+}
+function playTone(freq, dur, type = 'sine', vol = 0.18) {
+    const ctx = getAudio();
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.connect(g); g.connect(ctx.destination);
+    osc.type = type; osc.frequency.value = freq;
+    g.gain.setValueAtTime(vol, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + dur);
+}
+function playHit()    { playTone(130, 0.4, 'sawtooth', 0.25); }
+function playSpeedUp() {
+    playTone(660, 0.12, 'sine'); 
+    setTimeout(() => playTone(880, 0.18, 'sine'), 140);
+    setTimeout(() => playTone(1100, 0.22, 'sine'), 290);
+}
+
+// ============================================================
+// HUD refs
+// ============================================================
+const scoreEl    = document.getElementById('score');
+const speedLabel = document.getElementById('speed-label');
+const speedFlash = document.getElementById('speed-flash');
+let flashTimer = null;
+function showSpeedFlash() {
+    speedFlash.textContent = '⚡ FASTER! ⚡';
+    speedFlash.style.opacity = '1';
+    if (flashTimer) clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => { speedFlash.style.opacity = '0'; }, 1400);
+}
+
+// ============================================================
+// Game state
+// ============================================================
+let gameRunning   = false;
+let score         = 0;
+let speedLevel    = 1;
+let speedTimer    = 0;
+let spawnTimer    = 0;
+let spawnInterval = 2.0;
+const BASE_SPEED  = 2.5;
+let currentSpeed  = BASE_SPEED;
+const PLAYER_SPEED = 8;
+const keys = {};
+
+// ============================================================
+// Input
+// ============================================================
+document.addEventListener('keydown', e => { keys[e.code] = true; });
+document.addEventListener('keyup',   e => { keys[e.code] = false; });
+
+let touchLeft = false, touchRight = false;
+const btnL = document.getElementById('btn-left');
+const btnR = document.getElementById('btn-right');
+btnL.addEventListener('touchstart', e => { e.preventDefault(); touchLeft  = true;  }, { passive: false });
+btnL.addEventListener('touchend',   e => { e.preventDefault(); touchLeft  = false; }, { passive: false });
+btnR.addEventListener('touchstart', e => { e.preventDefault(); touchRight = true;  }, { passive: false });
+btnR.addEventListener('touchend',   e => { e.preventDefault(); touchRight = false; }, { passive: false });
+
+// ============================================================
+// Start / End / Restart
+// ============================================================
+function startGame() {
+    getAudio();   // unlock AudioContext on first gesture
+    gameRunning   = true;
+    score         = 0;
+    speedLevel    = 1;
+    speedTimer    = 0;
+    spawnTimer    = 0;
+    spawnInterval = 2.0;
+    currentSpeed  = BASE_SPEED;
+    scoreEl.textContent    = 'Score: 0';
+    speedLabel.textContent = 'Speed: 1';
+
+    // Remove old obstacles
+    for (const obs of obstacles) scene.remove(obs);
+    obstacles.length = 0;
+
+    // Reset submarine
+    subGroup.position.set(0, PLAYER_Y, 0);
+    subGroup.rotation.z = 0;
+
+    document.getElementById('title-screen').style.display    = 'none';
+    document.getElementById('gameover-screen').style.display = 'none';
+}
+
+function endGame() {
+    gameRunning = false;
+    playHit();
+    document.getElementById('final-score-text').textContent = 'Score: ' + Math.floor(score);
+    document.getElementById('gameover-screen').style.display = 'flex';
+}
+
+// Title screen events
+const titleScreen = document.getElementById('title-screen');
+titleScreen.addEventListener('click',    startGame);
+titleScreen.addEventListener('touchend', e => { e.preventDefault(); startGame(); }, { passive: false });
+
+document.addEventListener('keydown', e => {
+    if (e.code === 'Space' && !gameRunning) { e.preventDefault(); startGame(); }
+});
+
+// Game-over screen events
+const restartBtn = document.getElementById('restart-btn');
+restartBtn.addEventListener('click',    startGame);
+restartBtn.addEventListener('touchend', e => { e.preventDefault(); startGame(); }, { passive: false });
+
+// ============================================================
+// Render loop
+// ============================================================
+let lastTs = 0;
+function loop(ts) {
+    requestAnimationFrame(loop);
+    const dt = Math.min((ts - lastTs) / 1000, 0.05);
+    lastTs = ts;
+
+    // Animate bubbles always (makes the scene alive on title screen too)
+    for (const b of bubbles) {
+        b.position.y += b.userData.speed * dt;
+        if (b.position.y > 8) b.position.y = -8;
+    }
+
+    if (!gameRunning) { renderer.render(scene, camera); return; }
+
+    // Score
+    score += dt * 10;
+    scoreEl.textContent = 'Score: ' + Math.floor(score);
+
+    // Speed boost every 10 s
+    speedTimer += dt;
+    if (speedTimer >= 10) {
+        speedTimer = 0;
+        speedLevel++;
+        currentSpeed  = BASE_SPEED + (speedLevel - 1) * 0.8;
+        spawnInterval = Math.max(0.45, spawnInterval - 0.18);
+        speedLabel.textContent = 'Speed: ' + speedLevel;
+        showSpeedFlash();
+        playSpeedUp();
+    }
+
+    // Spawn
+    spawnTimer += dt;
+    if (spawnTimer >= spawnInterval) {
+        spawnTimer = 0;
+        spawnObstacle();
+    }
+
+    // Player movement
+    let mx = 0;
+    if (keys['ArrowLeft']  || keys['KeyA'] || touchLeft)  mx -= 1;
+    if (keys['ArrowRight'] || keys['KeyD'] || touchRight) mx += 1;
+    subGroup.position.x = Math.max(-PLAY_W, Math.min(PLAY_W, subGroup.position.x + mx * PLAYER_SPEED * dt));
+    subGroup.rotation.z = -mx * 0.18;
+
+    // Periscope subtle bob
+    subPeri.position.y = 0.62 + Math.sin(ts * 0.003) * 0.04;
+
+    // Move obstacles
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+        const obs = obstacles[i];
+        obs.position.y -= obs.userData.speed * dt;
+
+        if (obs.userData.type === 'jellyfish') {
+            obs.userData.wobblePhase += dt * 1.8;
+            obs.position.x += Math.sin(obs.userData.wobblePhase) * 0.012;
+            obs.rotation.y += dt * 0.6;
+            obs.rotation.x = Math.sin(obs.userData.wobblePhase * 0.5) * 0.1;
+        } else {
+            // Shark swims side-to-side slightly
+            obs.position.x += Math.sin(ts * 0.001 + i) * 0.008;
+        }
+
+        if (hitTest(obs)) { endGame(); return; }
+
+        if (obs.position.y < KILL_Y) {
+            scene.remove(obs);
+            obstacles.splice(i, 1);
+        }
+    }
+
+    // Gentle camera sway
+    camera.position.x = Math.sin(ts * 0.0003) * 0.25;
+
+    renderer.render(scene, camera);
+}
+
+// Resize
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

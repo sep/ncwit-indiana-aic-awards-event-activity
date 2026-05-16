@@ -1,4 +1,12 @@
 const GAMES = [
+
+  {
+    "title": "test2",
+    "author": "test2",
+    "path": "games/test2/index.html",
+    "genre": "Dodge It!",
+    "color": "ocean"
+  },
   {
     "title": "Rip Tide",
     "author": "Nicole Selig",
