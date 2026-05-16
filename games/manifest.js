@@ -33,5 +33,12 @@ const GAMES = [
     "genre": "Platformer",
 >>>>>>> Stashed changes
     "color": "Neon Cyber"
+  },
+  {
+    "title": "Icy Angry Birds (?)",
+    "author": "Valerie",
+    "path": "games/valerie/index.html",
+    "genre": "Angry Birds",
+    "color": "Monochrome"
   }
 ];

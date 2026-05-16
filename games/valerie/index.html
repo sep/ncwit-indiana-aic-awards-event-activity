@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Icy Angry Birds (?)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      overflow: hidden;
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      background: #0f1114;
+      color: #eff3f8;
+    }
+    canvas { display: block; }
+
+    #ui {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    #score {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      font-size: 1.4rem;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      color: #f9fcff;
+      text-shadow: 0 0 10px rgba(255, 255, 255, 0.35);
+    }
+
+    #birds-left {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #d7dfe8;
+      text-shadow: 0 0 8px rgba(230, 240, 255, 0.35);
+    }
+
+    #controls-hint {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 8px 12px;
+      border-radius: 10px;
+      background: rgba(15, 20, 26, 0.55);
+      color: #e8eff7;
+      font-size: 0.9rem;
+      text-align: center;
+      max-width: min(96vw, 740px);
+      line-height: 1.35;
+    }
+
+    .screen {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 12px;
+      background: radial-gradient(circle at 20% 20%, rgba(210, 220, 232, 0.25), rgba(10, 12, 14, 0.95));
+      z-index: 30;
+      pointer-events: auto;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .screen h1 {
+      font-size: clamp(2rem, 8vw, 4rem);
+      color: #ffffff;
+      letter-spacing: 0.04em;
+      text-shadow: 0 0 20px rgba(255, 255, 255, 0.4);
+    }
+
+    .screen .sub {
+      color: #dde6ef;
+      max-width: 760px;
+      line-height: 1.5;
+      font-size: clamp(0.95rem, 2.8vw, 1.15rem);
+    }
+
+    .screen .start-text {
+      margin-top: 10px;
+      color: #f4f8fc;
+      font-size: 1.2rem;
+      animation: pulse 1.3s ease-in-out infinite;
+    }
+
+    .screen .final-score {
+      color: #f8fbff;
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin: 6px 0;
+    }
+
+    .screen button {
+      min-height: 48px;
+      padding: 12px 24px;
+      border: 2px solid #f2f7fc;
+      border-radius: 12px;
+      background: rgba(250, 252, 255, 0.08);
+      color: #ffffff;
+      cursor: pointer;
+      font-size: 1rem;
+      font-weight: 700;
+      transition: transform 0.15s ease, background 0.15s ease;
+      pointer-events: auto;
+    }
+
+    .screen button:hover { transform: translateY(-1px); background: rgba(250, 252, 255, 0.16); }
+
+    .credit {
+      position: absolute;
+      bottom: 12px;
+      font-size: 0.85rem;
+      color: #cad5df;
+      opacity: 0.92;
+    }
+
+    .hidden { display: none !important; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    #mobile-controls {
+      display: none;
+      position: fixed;
+      inset: auto 0 0 0;
+      height: 40%;
+      z-index: 20;
+      pointer-events: none;
+    }
+
+    #mobile-controls .pad,
+    #mobile-controls .actions {
+      position: absolute;
+      bottom: 12px;
+      display: flex;
+      gap: 10px;
+      pointer-events: auto;
+    }
+
+    #mobile-controls .pad { left: 10px; }
+    #mobile-controls .actions { right: 10px; }
+
+    .touch-btn {
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      border: 2px solid rgba(250, 252, 255, 0.65);
+      background: rgba(20, 24, 28, 0.45);
+      color: #f8fbff;
+      display: grid;
+      place-items: center;
+      font-size: 1.5rem;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+      min-height: 44px;
+    }
+
+    .touch-btn.active,
+    .touch-btn:active {
+      background: rgba(240, 247, 255, 0.25);
+      transform: scale(0.97);
+    }
+
+    @media (pointer: coarse) {
+      #mobile-controls { display: block; }
+      #controls-hint { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <div id="score">Score: 0</div>
+    <div id="birds-left">Birds: 3</div>
+    <div id="controls-hint">Keyboard: Arrow Keys aim | Hold Space to pull | Release Space to launch. Mouse/Touch: Drag bird back then release.</div>
+  </div>
+
+  <div id="mobile-controls">
+    <div class="pad">
+      <div class="touch-btn" id="btn-left">◀</div>
+      <div class="touch-btn" id="btn-right">▶</div>
+      <div class="touch-btn" id="btn-up">▲</div>
+      <div class="touch-btn" id="btn-down">▼</div>
+    </div>
+    <div class="actions">
+      <div class="touch-btn" id="btn-pull">◎</div>
+      <div class="touch-btn" id="btn-launch">🚀</div>
+    </div>
+  </div>
+
+  <div id="title-screen" class="screen">
+    <h1>ICY ANGRY BIRDS (?)</h1>
+    <p class="sub">Valerie's arctic slingshot showdown.<br/>Objective: launch icy birds to knock down iceberg towers and eliminate all penguin pigs.</p>
+    <p class="sub">Special Feature: Freeze Time Surprise! Build combo hits to charge FREEZE, then press F (or the ◎ button) to pause pigs and debris.</p>
+    <p class="sub">Controls: Drag bird back and release, or use Arrow Keys + Space. Press R for quick restart.</p>
+    <p class="start-text">Press SPACE or Tap to Start</p>
+    <p class="credit">Made for Valerie • NCWIT Indiana AIC Awards Event</p>
+  </div>
+
+  <div id="gameover-screen" class="screen hidden">
+    <h1 id="gameover-title">GAME OVER</h1>
+    <p class="final-score" id="final-score">Score: 0</p>
+    <button id="restart-btn">Play Again</button>
+    <p class="credit">Made for Valerie • NCWIT Indiana AIC Awards Event</p>
+  </div>
+
+  <script>
+    const CONFIG = {
+      sky: 0x0e1115,
+      fog: 0x1b2026,
+      snowGround: 0xd6dde5,
+      ice: 0xb8c3d0,
+      steel: 0x8a949f,
+      player: 0xf1f5fa,
+      enemy: 0x3a4753,
+      slingshot: 0x9aa4ae,
+      gravity: -0.0085,
+      drag: 0.995,
+      restPos: new THREE.Vector3(-11.2, 1.8, 0),
+      maxPullX: 3.6,
+      maxPullY: 2.0,
+      birdsPerRound: 3,
+      freezeDuration: 4.2,
+      freezeChargeNeeded: 350
+    };
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(CONFIG.sky);
+    scene.fog = new THREE.Fog(CONFIG.fog, 20, 80);
+
+    const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 200);
+    camera.position.set(0, 10, 26);
+    camera.lookAt(0, 4, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    document.body.appendChild(renderer.domElement);
+
+    const hemi = new THREE.HemisphereLight(0xeef4fa, 0x6f7d8d, 0.9);
+    scene.add(hemi);
+
+    const dir = new THREE.DirectionalLight(0xffffff, 0.95);
+    dir.position.set(9, 20, 12);
+    scene.add(dir);
+
+    const rim = new THREE.PointLight(0xe6eef7, 1.2, 45);
+    rim.position.set(-10, 8, 8);
+    scene.add(rim);
+
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(90, 50),
+      new THREE.MeshStandardMaterial({ color: CONFIG.snowGround, roughness: 0.9, metalness: 0.05 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.02;
+    scene.add(ground);
+
+    const iceLine = new THREE.Mesh(
+      new THREE.PlaneGeometry(90, 2),
+      new THREE.MeshStandardMaterial({ color: 0xc8d3de, roughness: 0.35, metalness: 0.2 })
+    );
+    iceLine.rotation.x = -Math.PI / 2;
+    iceLine.position.set(0, 0.01, 0);
+    scene.add(iceLine);
+
+    function createIceberg(x, z, scale) {
+      const g = new THREE.Group();
+      const base = new THREE.Mesh(
+        new THREE.ConeGeometry(1.4 * scale, 3.2 * scale, 6),
+        new THREE.MeshStandardMaterial({ color: 0x96a2af, roughness: 0.7, metalness: 0.1 })
+      );
+      base.position.y = 1.6 * scale;
+      g.add(base);
+
+      const cap = new THREE.Mesh(
+        new THREE.ConeGeometry(1.1 * scale, 1.2 * scale, 6),
+        new THREE.MeshStandardMaterial({ color: 0xe9f0f7, roughness: 0.5, metalness: 0.05 })
+      );
+      cap.position.y = 3.4 * scale;
+      g.add(cap);
+
+      const side = new THREE.Mesh(
+        new THREE.BoxGeometry(0.4 * scale, 1.1 * scale, 0.3 * scale),
+        new THREE.MeshStandardMaterial({ color: 0xc3ced8, roughness: 0.6, metalness: 0.1 })
+      );
+      side.position.set(0.6 * scale, 2.2 * scale, 0.4 * scale);
+      side.rotation.z = 0.2;
+      g.add(side);
+
+      g.position.set(x, 0, z);
+      scene.add(g);
+    }
+
+    for (let i = 0; i < 11; i++) {
+      createIceberg(-28 + i * 6, -17, 0.9 + (i % 3) * 0.2);
+      createIceberg(-26 + i * 6, 17, 0.8 + ((i + 1) % 3) * 0.22);
+    }
+
+    const snowGroup = new THREE.Group();
+    scene.add(snowGroup);
+    const snowFlakes = [];
+    for (let i = 0; i < 170; i++) {
+      const flake = new THREE.Mesh(
+        new THREE.SphereGeometry(0.06 + Math.random() * 0.08, 6, 6),
+        new THREE.MeshStandardMaterial({ color: 0xf7fbff, transparent: true, opacity: 0.7 })
+      );
+      flake.position.set((Math.random() - 0.5) * 65, 3 + Math.random() * 24, (Math.random() - 0.5) * 34);
+      flake.userData.speed = 0.01 + Math.random() * 0.03;
+      snowGroup.add(flake);
+      snowFlakes.push(flake);
+    }
+
+    function createBird() {
+      const g = new THREE.Group();
+      const bodyMat = new THREE.MeshStandardMaterial({ color: CONFIG.player, roughness: 0.35, metalness: 0.15, emissive: 0x20262d, emissiveIntensity: 0.15 });
+      const beakMat = new THREE.MeshStandardMaterial({ color: 0xb4c0cb, roughness: 0.4, metalness: 0.2 });
+      const wingMat = new THREE.MeshStandardMaterial({ color: 0xc4ced8, roughness: 0.5, metalness: 0.1 });
+
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.55, 14, 12), bodyMat);
+      g.add(body);
+
+      const belly = new THREE.Mesh(new THREE.SphereGeometry(0.33, 10, 10), new THREE.MeshStandardMaterial({ color: 0xeaf0f7, roughness: 0.6 }));
+      belly.position.set(0, -0.1, 0.42);
+      g.add(belly);
+
+      const beak = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.45, 8), beakMat);
+      beak.position.set(0, -0.03, 0.68);
+      beak.rotation.x = Math.PI / 2;
+      g.add(beak);
+
+      const wingL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.42, 0.35), wingMat);
+      wingL.position.set(-0.45, 0.05, 0.05);
+      wingL.rotation.z = 0.28;
+      g.add(wingL);
+
+      const wingR = wingL.clone();
+      wingR.position.x = 0.45;
+      wingR.rotation.z = -0.28;
+      g.add(wingR);
+
+      const eyeMat = new THREE.MeshStandardMaterial({ color: 0x101317 });
+      const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), eyeMat);
+      eyeL.position.set(-0.16, 0.17, 0.44);
+      g.add(eyeL);
+
+      const eyeR = eyeL.clone();
+      eyeR.position.x = 0.16;
+      g.add(eyeR);
+
+      return g;
+    }
+
+    function createPig() {
+      const g = new THREE.Group();
+      const mat = new THREE.MeshStandardMaterial({ color: CONFIG.enemy, roughness: 0.55, metalness: 0.2 });
+
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.62, 12, 10), mat);
+      g.add(body);
+
+      const beak = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.32, 7), new THREE.MeshStandardMaterial({ color: 0x8f9aa6, roughness: 0.4 }));
+      beak.position.set(0, -0.02, 0.66);
+      beak.rotation.x = Math.PI / 2;
+      g.add(beak);
+
+      const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.14, 10), new THREE.MeshStandardMaterial({ color: 0x202a33, metalness: 0.4, roughness: 0.35 }));
+      hat.position.y = 0.61;
+      g.add(hat);
+
+      const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), new THREE.MeshStandardMaterial({ color: 0xf0f4f8 }));
+      eyeL.position.set(-0.16, 0.14, 0.48);
+      g.add(eyeL);
+
+      const pupilL = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6), new THREE.MeshStandardMaterial({ color: 0x0d1218 }));
+      pupilL.position.set(0.01, 0, 0.06);
+      eyeL.add(pupilL);
+
+      const eyeR = eyeL.clone();
+      eyeR.position.x = 0.16;
+      g.add(eyeR);
+
+      return g;
+    }
+
+    function createIceBlock(w, h, d) {
+      const g = new THREE.Group();
+      const core = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, d),
+        new THREE.MeshStandardMaterial({ color: CONFIG.ice, roughness: 0.35, metalness: 0.25, transparent: true, opacity: 0.95 })
+      );
+      g.add(core);
+
+      const edge = new THREE.Mesh(
+        new THREE.BoxGeometry(w * 1.03, h * 1.03, d * 1.03),
+        new THREE.MeshBasicMaterial({ color: 0xf7fbff, wireframe: true, transparent: true, opacity: 0.18 })
+      );
+      g.add(edge);
+
+      return g;
+    }
+
+    function createSlingshot() {
+      const g = new THREE.Group();
+      const woodMat = new THREE.MeshStandardMaterial({ color: CONFIG.slingshot, roughness: 0.45, metalness: 0.3 });
+
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, 2.1, 10), woodMat);
+      base.position.set(0, 1.05, 0);
+      g.add(base);
+
+      const armL = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.22, 1.7, 10), woodMat);
+      armL.position.set(-0.45, 2.35, 0);
+      armL.rotation.z = 0.22;
+      g.add(armL);
+
+      const armR = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.22, 1.7, 10), woodMat);
+      armR.position.set(0.45, 2.35, 0);
+      armR.rotation.z = -0.22;
+      g.add(armR);
+
+      const cross = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.12, 0.12), woodMat);
+      cross.position.set(0, 3.04, 0);
+      g.add(cross);
+
+      return g;
+    }
+
+    const slingshot = createSlingshot();
+    slingshot.position.set(CONFIG.restPos.x, 0, CONFIG.restPos.z);
+    scene.add(slingshot);
+
+    const bandMat = new THREE.LineBasicMaterial({ color: 0xf5f9ff, transparent: true, opacity: 0.8 });
+    const leftBandGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+    const rightBandGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+    const bandLeft = new THREE.Line(leftBandGeo, bandMat);
+    const bandRight = new THREE.Line(rightBandGeo, bandMat);
+    scene.add(bandLeft);
+    scene.add(bandRight);
+
+    const bandAnchorLeft = new THREE.Vector3(CONFIG.restPos.x - 0.45, 3.02, 0);
+    const bandAnchorRight = new THREE.Vector3(CONFIG.restPos.x + 0.45, 3.02, 0);
+
+    const scoreEl = document.getElementById("score");
+    const birdsEl = document.getElementById("birds-left");
+    const titleScreen = document.getElementById("title-screen");
+    const gameoverScreen = document.getElementById("gameover-screen");
+    const gameoverTitle = document.getElementById("gameover-title");
+    const finalScore = document.getElementById("final-score");
+    const restartBtn = document.getElementById("restart-btn");
+
+    let score = 0;
+    let birdsLeft = CONFIG.birdsPerRound;
+    let gameState = "title";
+    let bird = null;
+    let birdVel = new THREE.Vector3();
+    let birdFlying = false;
+    let isDragging = false;
+    let pigs = [];
+    let blocks = [];
+    let particles = [];
+    let keyPullMode = false;
+    let freezeCharge = 0;
+    let freezeTimer = 0;
+    let cameraTargetX = 0;
+
+    const keys = {};
+    const touch = { left: false, right: false, up: false, down: false, pull: false };
+
+    const raycaster = new THREE.Raycaster();
+    const mouseNdc = new THREE.Vector2();
+    const dragPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let musicTimer = 0;
+    let musicStep = 0;
+
+    function playTone(freq, dur, type, gainValue) {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      gain.gain.value = gainValue;
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      const now = audioCtx.currentTime;
+      gain.gain.setValueAtTime(gainValue, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      osc.start(now);
+      osc.stop(now + dur + 0.01);
+    }
+
+    function playLaunchSound() { playTone(390, 0.18, "triangle", 0.09); }
+    function playHitSound() { playTone(260, 0.25, "square", 0.1); }
+    function playPigPop() { playTone(540, 0.2, "sine", 0.11); }
+    function playFreezeSound() { playTone(620, 0.4, "sawtooth", 0.08); }
+
+    function updateMusic(dt) {
+      musicTimer += dt;
+      if (musicTimer > 0.48) {
+        musicTimer = 0;
+        const melody = [220, 277, 330, 370, 330, 277, 247, 294];
+        playTone(melody[musicStep % melody.length], 0.32, "triangle", 0.017);
+        musicStep++;
+      }
+    }
+
+    function randomRange(min, max) {
+      return min + Math.random() * (max - min);
+    }
+
+    function spawnParticles(position, color, amount) {
+      for (let i = 0; i < amount; i++) {
+        const mesh = new THREE.Mesh(
+          new THREE.SphereGeometry(0.06 + Math.random() * 0.08, 6, 6),
+          new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.85 })
+        );
+        mesh.position.copy(position);
+        mesh.userData.vel = new THREE.Vector3(randomRange(-0.14, 0.14), randomRange(0.03, 0.22), randomRange(-0.12, 0.12));
+        mesh.userData.life = 0.8 + Math.random() * 0.6;
+        scene.add(mesh);
+        particles.push(mesh);
+      }
+    }
+
+    function clearRoundMeshes() {
+      if (bird) scene.remove(bird);
+      pigs.forEach(p => scene.remove(p.mesh));
+      blocks.forEach(b => scene.remove(b.mesh));
+      particles.forEach(p => scene.remove(p));
+      pigs = [];
+      blocks = [];
+      particles = [];
+      bird = null;
+      birdFlying = false;
+      isDragging = false;
+      keyPullMode = false;
+    }
+
+    function addPig(x, y, z) {
+      const mesh = createPig();
+      mesh.position.set(x, y, z);
+      scene.add(mesh);
+      pigs.push({ mesh, radius: 0.62, velY: 0, alive: true });
+    }
+
+    function addBlock(x, y, z, w, h, d, hp) {
+      const mesh = createIceBlock(w, h, d);
+      mesh.position.set(x, y, z);
+      scene.add(mesh);
+      blocks.push({ mesh, w, h, d, hp, alive: true, velY: 0 });
+    }
+
+    function buildLevel() {
+      const baseX = 8.2;
+      addBlock(baseX, 0.7, 0, 0.8, 1.4, 0.8, 2);
+      addBlock(baseX + 1.4, 0.7, 0, 0.8, 1.4, 0.8, 2);
+      addBlock(baseX + 0.7, 1.7, 0, 2.2, 0.5, 0.8, 3);
+      addPig(baseX + 0.7, 2.55, 0);
+
+      addBlock(baseX + 3.8, 0.6, 0.6, 1.2, 1.2, 0.8, 2);
+      addBlock(baseX + 3.8, 0.6, -0.6, 1.2, 1.2, 0.8, 2);
+      addBlock(baseX + 3.8, 1.8, 0, 1.2, 0.4, 1.9, 3);
+      addPig(baseX + 3.8, 2.58, 0);
+
+      addBlock(baseX + 6.2, 0.55, 0, 2.2, 1.1, 0.8, 2);
+      addBlock(baseX + 6.2, 1.45, 0, 0.9, 0.7, 0.8, 2);
+      addPig(baseX + 6.2, 2.3, 0);
+    }
+
+    function spawnBirdAtRest() {
+      if (bird) scene.remove(bird);
+      bird = createBird();
+      bird.position.copy(CONFIG.restPos);
+      bird.position.y = 2.1;
+      birdVel.set(0, 0, 0);
+      birdFlying = false;
+      scene.add(bird);
+      updateRubberBand();
+    }
+
+    function setBirdFromPull(pullX, pullY) {
+      if (!bird || birdFlying) return;
+      const x = Math.max(-CONFIG.maxPullX, Math.min(0, pullX));
+      const y = Math.max(-CONFIG.maxPullY, Math.min(CONFIG.maxPullY, pullY));
+      bird.position.x = CONFIG.restPos.x + x;
+      bird.position.y = 2.1 + y;
+      bird.position.z = 0;
+      updateRubberBand();
+    }
+
+    function launchBird() {
+      if (!bird || birdFlying) return;
+      const dx = CONFIG.restPos.x - bird.position.x;
+      const dy = 2.1 - bird.position.y;
+      const strength = Math.sqrt(dx * dx + dy * dy);
+      if (strength < 0.2) return;
+      birdVel.set(dx * 0.12, -dy * 0.11 + 0.02, 0);
+      birdFlying = true;
+      isDragging = false;
+      keyPullMode = false;
+      bandLeft.visible = false;
+      bandRight.visible = false;
+      playLaunchSound();
+    }
+
+    function updateRubberBand() {
+      if (!bird || birdFlying) {
+        bandLeft.visible = false;
+        bandRight.visible = false;
+        return;
+      }
+      bandLeft.visible = true;
+      bandRight.visible = true;
+      const left = [bandAnchorLeft, bird.position.clone()];
+      const right = [bandAnchorRight, bird.position.clone()];
+      bandLeft.geometry.setFromPoints(left);
+      bandRight.geometry.setFromPoints(right);
+      bandLeft.geometry.attributes.position.needsUpdate = true;
+      bandRight.geometry.attributes.position.needsUpdate = true;
+    }
+
+    function supportedByAny(obj, yBottom) {
+      if (yBottom <= 0.01) return true;
+      for (const b of blocks) {
+        if (!b.alive || b === obj) continue;
+        const top = b.mesh.position.y + b.h / 2;
+        const withinY = Math.abs(yBottom - top) < 0.08;
+        if (!withinY) continue;
+        const dx = Math.abs(obj.mesh.position.x - b.mesh.position.x);
+        const dz = Math.abs(obj.mesh.position.z - b.mesh.position.z);
+        const overlapX = dx < ((obj.w ? obj.w : obj.radius * 2) / 2 + b.w / 2 - 0.06);
+        const overlapZ = dz < ((obj.d ? obj.d : obj.radius * 2) / 2 + b.d / 2 - 0.06);
+        if (overlapX && overlapZ) return true;
+      }
+      return false;
+    }
+
+    function applyGravityToObjects(dt) {
+      const freezeActive = freezeTimer > 0;
+      for (const b of blocks) {
+        if (!b.alive) continue;
+        if (freezeActive) continue;
+        const bottomY = b.mesh.position.y - b.h / 2;
+        if (!supportedByAny(b, bottomY)) {
+          b.velY += CONFIG.gravity * dt * 60;
+          b.mesh.position.y += b.velY * dt * 60;
+        } else {
+          b.velY = Math.max(0, b.velY);
+        }
+        if (b.mesh.position.y < -2.5) {
+          b.alive = false;
+          scene.remove(b.mesh);
+          spawnParticles(new THREE.Vector3(b.mesh.position.x, 0.2, b.mesh.position.z), 0xd7e2ee, 8);
+          score += 25;
+        }
+      }
+
+      for (const p of pigs) {
+        if (!p.alive) continue;
+        if (freezeActive) continue;
+        const bottomY = p.mesh.position.y - p.radius;
+        if (!supportedByAny(p, bottomY)) {
+          p.velY += CONFIG.gravity * dt * 60;
+          p.mesh.position.y += p.velY * dt * 60;
+        } else {
+          p.velY = 0;
+        }
+        p.mesh.rotation.y += 0.015;
+        if (p.mesh.position.y < -1.8) {
+          p.alive = false;
+          scene.remove(p.mesh);
+          spawnParticles(p.mesh.position, 0x3e4c58, 20);
+          playPigPop();
+          score += 220;
+          freezeCharge += 120;
+        }
+      }
+    }
+
+    function handleCollisions() {
+      if (!bird || !birdFlying) return;
+      const birdPos = bird.position;
+
+      for (const b of blocks) {
+        if (!b.alive) continue;
+        const dx = Math.abs(birdPos.x - b.mesh.position.x);
+        const dy = Math.abs(birdPos.y - b.mesh.position.y);
+        const dz = Math.abs(birdPos.z - b.mesh.position.z);
+        if (dx < b.w / 2 + 0.48 && dy < b.h / 2 + 0.48 && dz < b.d / 2 + 0.48) {
+          b.hp -= 1;
+          score += 35;
+          freezeCharge += 25;
+          spawnParticles(birdPos, 0xecf3fb, 12);
+          playHitSound();
+          birdVel.x *= 0.82;
+          birdVel.y *= -0.35;
+          if (b.hp <= 0) {
+            b.alive = false;
+            scene.remove(b.mesh);
+            spawnParticles(b.mesh.position, 0xd2dee9, 14);
+            score += 70;
+            freezeCharge += 35;
+          }
+          break;
+        }
+      }
+
+      for (const p of pigs) {
+        if (!p.alive) continue;
+        const dist = p.mesh.position.distanceTo(birdPos);
+        if (dist < p.radius + 0.5) {
+          p.alive = false;
+          scene.remove(p.mesh);
+          spawnParticles(p.mesh.position, 0x43505c, 22);
+          playPigPop();
+          score += 260;
+          freezeCharge += 160;
+          birdVel.multiplyScalar(0.75);
+          birdVel.y += 0.06;
+        }
+      }
+    }
+
+    function updateBird(dt) {
+      if (!bird) return;
+
+      if (birdFlying) {
+        const freezeFactor = freezeTimer > 0 ? 0.16 : 1;
+        birdVel.y += CONFIG.gravity * dt * 60 * freezeFactor;
+        bird.position.addScaledVector(birdVel, dt * 60 * freezeFactor);
+        bird.rotation.z -= birdVel.x * 0.03;
+        bird.rotation.y += 0.05;
+        birdVel.multiplyScalar(Math.pow(CONFIG.drag, dt * 60));
+
+        handleCollisions();
+
+        if (bird.position.y < -1.5 || bird.position.x > 20 || bird.position.x < -18 || birdVel.length() < 0.03) {
+          birdsLeft -= 1;
+          birdsEl.textContent = "Birds: " + Math.max(0, birdsLeft);
+          scene.remove(bird);
+          bird = null;
+          birdFlying = false;
+
+          if (pigs.filter(p => p.alive).length === 0) {
+            endRound(true);
+            return;
+          }
+
+          if (birdsLeft > 0) {
+            spawnBirdAtRest();
+          } else {
+            endRound(false);
+          }
+        }
+      } else {
+        if (keyPullMode || touch.pull) {
+          const pullSpeed = 2.6 * dt;
+          let xPull = bird.position.x - CONFIG.restPos.x;
+          let yPull = bird.position.y - 2.1;
+
+          if (keys.ArrowLeft || keys.a || keys.A || touch.left) xPull -= pullSpeed;
+          if (keys.ArrowRight || keys.d || keys.D || touch.right) xPull += pullSpeed;
+          if (keys.ArrowUp || keys.w || keys.W || touch.up) yPull += pullSpeed;
+          if (keys.ArrowDown || keys.s || keys.S || touch.down) yPull -= pullSpeed;
+
+          setBirdFromPull(xPull, yPull);
+        }
+      }
+    }
+
+    function endRound(win) {
+      gameState = "gameover";
+      finalScore.textContent = "Score: " + Math.floor(score);
+      gameoverTitle.textContent = win ? "YOU WIN!" : "GAME OVER";
+      gameoverScreen.classList.remove("hidden");
+      if (win) playTone(660, 0.35, "triangle", 0.12);
+      else playTone(170, 0.35, "sawtooth", 0.08);
+    }
+
+    function resetGame() {
+      clearRoundMeshes();
+      score = 0;
+      birdsLeft = CONFIG.birdsPerRound;
+      freezeCharge = 0;
+      freezeTimer = 0;
+      cameraTargetX = 0;
+      scoreEl.textContent = "Score: 0";
+      birdsEl.textContent = "Birds: " + birdsLeft;
+      buildLevel();
+      spawnBirdAtRest();
+      gameState = "playing";
+      titleScreen.classList.add("hidden");
+      gameoverScreen.classList.add("hidden");
+    }
+
+    function startGame() {
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      resetGame();
+    }
+
+    function updateFreeze(dt) {
+      if (freezeTimer > 0) {
+        freezeTimer -= dt;
+        if (freezeTimer <= 0) {
+          freezeTimer = 0;
+          scene.fog.color.setHex(CONFIG.fog);
+        } else {
+          scene.fog.color.setHex(0x6d7782);
+        }
+      }
+    }
+
+    function tryActivateFreeze() {
+      if (gameState !== "playing") return;
+      if (freezeTimer > 0) return;
+      if (freezeCharge < CONFIG.freezeChargeNeeded) return;
+      freezeCharge = 0;
+      freezeTimer = CONFIG.freezeDuration;
+      playFreezeSound();
+      spawnParticles(new THREE.Vector3(0, 2.5, 0), 0xffffff, 28);
+    }
+
+    function updateParticles(dt) {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.userData.life -= dt;
+        p.position.addScaledVector(p.userData.vel, dt * 60);
+        p.userData.vel.y += CONFIG.gravity * dt * 0.22;
+        p.material.opacity = Math.max(0, p.userData.life / 1.4);
+        if (p.userData.life <= 0) {
+          scene.remove(p);
+          particles.splice(i, 1);
+        }
+      }
+    }
+
+    function updateSnow(dt) {
+      for (const flake of snowFlakes) {
+        flake.position.y -= flake.userData.speed * dt * 60;
+        flake.position.x += Math.sin((flake.position.y + flake.position.z) * 0.13) * 0.003;
+        if (flake.position.y < 0.3) {
+          flake.position.y = 20 + Math.random() * 8;
+          flake.position.x = (Math.random() - 0.5) * 65;
+        }
+      }
+    }
+
+    function updateUI() {
+      scoreEl.textContent = "Score: " + Math.floor(score) + " | Freeze: " + Math.floor((freezeCharge / CONFIG.freezeChargeNeeded) * 100) + "%";
+    }
+
+    function updateCamera(dt) {
+      if (bird && birdFlying) {
+        cameraTargetX = Math.max(-2, Math.min(8, bird.position.x * 0.4));
+      } else {
+        cameraTargetX *= 0.96;
+      }
+      camera.position.x += (cameraTargetX - camera.position.x) * Math.min(0.08, dt * 6);
+      camera.lookAt(camera.position.x + 0.3, 3.4, 0);
+    }
+
+    function animate(now) {
+      requestAnimationFrame(animate);
+      const dt = Math.min(0.033, (now - (animate.last || now)) / 1000);
+      animate.last = now;
+
+      if (gameState === "playing") {
+        updateMusic(dt);
+        updateSnow(dt);
+        updateBird(dt);
+        applyGravityToObjects(dt);
+        updateParticles(dt);
+        updateFreeze(dt);
+        updateCamera(dt);
+
+        const aliveCount = pigs.filter(p => p.alive).length;
+        if (aliveCount === 0) endRound(true);
+
+        score += dt * 14;
+        freezeCharge = Math.min(CONFIG.freezeChargeNeeded, freezeCharge + dt * 7);
+        updateUI();
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    function pointerToWorld(clientX, clientY) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouseNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      mouseNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(mouseNdc, camera);
+      const hit = new THREE.Vector3();
+      raycaster.ray.intersectPlane(dragPlane, hit);
+      return hit;
+    }
+
+    function beginDrag(clientX, clientY) {
+      if (gameState !== "playing" || !bird || birdFlying) return;
+      const w = pointerToWorld(clientX, clientY);
+      if (w.distanceTo(bird.position) < 1.25) {
+        isDragging = true;
+      }
+    }
+
+    function dragBird(clientX, clientY) {
+      if (!isDragging || !bird || birdFlying) return;
+      const w = pointerToWorld(clientX, clientY);
+      const pullX = Math.min(0, w.x - CONFIG.restPos.x);
+      const pullY = w.y - 2.1;
+      setBirdFromPull(pullX, pullY);
+    }
+
+    function endDrag() {
+      if (!isDragging) return;
+      isDragging = false;
+      launchBird();
+    }
+
+    renderer.domElement.addEventListener("mousedown", (e) => beginDrag(e.clientX, e.clientY));
+    window.addEventListener("mousemove", (e) => dragBird(e.clientX, e.clientY));
+    window.addEventListener("mouseup", endDrag);
+
+    renderer.domElement.addEventListener("touchstart", (e) => {
+      if (e.touches.length) {
+        e.preventDefault();
+        beginDrag(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: false });
+
+    renderer.domElement.addEventListener("touchmove", (e) => {
+      if (e.touches.length) {
+        e.preventDefault();
+        dragBird(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: false });
+
+    renderer.domElement.addEventListener("touchend", (e) => {
+      e.preventDefault();
+      endDrag();
+    }, { passive: false });
+
+    window.addEventListener("keydown", (e) => {
+      keys[e.key] = true;
+      if (gameState === "title" && e.code === "Space") {
+        startGame();
+        return;
+      }
+
+      if (gameState === "playing") {
+        if (e.code === "Space") {
+          if (!birdFlying) keyPullMode = true;
+          e.preventDefault();
+        }
+        if (e.key === "f" || e.key === "F") tryActivateFreeze();
+        if (e.key === "r" || e.key === "R") startGame();
+      }
+    });
+
+    window.addEventListener("keyup", (e) => {
+      keys[e.key] = false;
+      if (e.code === "Space" && gameState === "playing" && keyPullMode) {
+        launchBird();
+      }
+      keyPullMode = false;
+    });
+
+    function bindTouchButton(id, key, onTap) {
+      const btn = document.getElementById(id);
+      const onStart = (e) => {
+        e.preventDefault();
+        if (key) touch[key] = true;
+        btn.classList.add("active");
+      };
+      const onEnd = (e) => {
+        e.preventDefault();
+        if (key) touch[key] = false;
+        btn.classList.remove("active");
+        if (onTap) onTap();
+      };
+      btn.addEventListener("touchstart", onStart, { passive: false });
+      btn.addEventListener("touchend", onEnd, { passive: false });
+      btn.addEventListener("touchcancel", onEnd, { passive: false });
+      btn.addEventListener("mousedown", onStart);
+      btn.addEventListener("mouseup", onEnd);
+      btn.addEventListener("mouseleave", (e) => {
+        if (key) touch[key] = false;
+        btn.classList.remove("active");
+      });
+    }
+
+    bindTouchButton("btn-left", "left");
+    bindTouchButton("btn-right", "right");
+    bindTouchButton("btn-up", "up");
+    bindTouchButton("btn-down", "down");
+    bindTouchButton("btn-pull", "pull", () => {
+      if (touch.pull && !birdFlying) launchBird();
+      touch.pull = false;
+      tryActivateFreeze();
+    });
+    bindTouchButton("btn-launch", null, () => {
+      if (!birdFlying) launchBird();
+    });
+
+    restartBtn.addEventListener("click", startGame);
+    restartBtn.addEventListener("touchend", (e) => {
+      e.preventDefault();
+      startGame();
+    }, { passive: false });
+
+    titleScreen.addEventListener("click", () => {
+      if (gameState === "title") startGame();
+    });
+    titleScreen.addEventListener("touchend", (e) => {
+      e.preventDefault();
+      if (gameState === "title") startGame();
+    }, { passive: false });
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    });
+
+    animate(0);
+  </script>
+</body>
+</html>
