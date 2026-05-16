@@ -16,6 +16,7 @@ Repo fast-path reference: see .github/copilot/skills/build-my-game/build-my-game
 - **Before generating any game**, read `.github/copilot/skills/build-my-game/known-issues.md` and apply every lesson listed there. This file is a living record of bugs found in previously generated games.
 - Before the interview, rely only on the known repo contract: games live in `games/<participant>/index.html`, the reference template is `games/_template/index.html`, and the registry is `games/manifest.json`.
 - Do not read unrelated files such as `README.md`, `index.html`, or `styles.css` unless the participant explicitly asks to change the arcade site or documentation.
+- When reading game files — including the template, an existing participant game, or the manifest — always scope reads to paths inside `games/`. Never read or open the root-level `index.html`.
 - After the participant answers, read only the files needed to generate the game and update the manifest.
 - Prefer one targeted read of the template and one targeted read of the manifest over broader codebase exploration.
 
