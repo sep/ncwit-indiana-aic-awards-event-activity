@@ -14,6 +14,7 @@ const GAMES = [
     "color": "Neon Cyber"
   },
   {
+<<<<<<< Updated upstream
     "title": "City Runner",
     "author": "Thanishka",
     "path": "games/thanishka/index.html",
@@ -25,6 +26,12 @@ const GAMES = [
     "author": "Zoey Trusty",
     "path": "games/zoey-trusty/index.html",
     "genre": "Endless Runner",
+=======
+    "title": "Party Jump",
+    "author": "Party Platformer",
+    "path": "games/party-jump/index.html",
+    "genre": "Platformer",
+>>>>>>> Stashed changes
     "color": "Neon Cyber"
   }
 ];

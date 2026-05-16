@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Party Jump</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; overflow: hidden; }
+        body {
+            background:
+                radial-gradient(circle at top, rgba(255, 190, 92, 0.22), transparent 30%),
+                radial-gradient(circle at 20% 20%, rgba(255, 86, 214, 0.18), transparent 22%),
+                linear-gradient(180deg, #150f2f 0%, #090814 45%, #04040a 100%);
+            font-family: "Trebuchet MS", "Gill Sans", "Segoe UI", sans-serif;
+            color: #fff;
+        }
+        canvas { display: block; }
+
+        #ui {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 10;
+        }
+        #score {
+            position: absolute;
+            top: 18px;
+            left: 18px;
+            font-size: 1.7rem;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            color: #fff4c7;
+            text-shadow: 0 0 14px rgba(255, 210, 90, 0.85);
+        }
+        #status {
+            position: absolute;
+            top: 62px;
+            left: 18px;
+            font-size: 0.95rem;
+            color: #aefcff;
+            text-shadow: 0 0 10px rgba(80, 255, 245, 0.7);
+            min-height: 1.2rem;
+        }
+        #hint {
+            position: absolute;
+            bottom: 18px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.7);
+            text-align: center;
+        }
+        #cloak-bar {
+            position: absolute;
+            top: 18px;
+            right: 18px;
+            width: min(240px, 40vw);
+            text-align: right;
+        }
+        #cloak-label {
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+            color: #ffd4f5;
+            text-shadow: 0 0 10px rgba(255, 91, 208, 0.75);
+        }
+        #cloak-meter {
+            height: 10px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.12);
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+        #cloak-fill {
+            height: 100%;
+            width: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #ff5bd2, #78fff3, #ffd95b);
+            box-shadow: 0 0 18px rgba(255, 91, 208, 0.65);
+        }
+
+        .screen {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(6, 7, 18, 0.78);
+            backdrop-filter: blur(10px);
+            z-index: 20;
+            pointer-events: auto;
+            text-align: center;
+            padding: 1.5rem;
+        }
+        .screen h1 {
+            font-size: clamp(2.6rem, 9vw, 5rem);
+            line-height: 0.95;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #fff7ca;
+            text-shadow:
+                0 0 18px rgba(255, 217, 90, 0.75),
+                0 0 40px rgba(255, 91, 208, 0.45);
+            margin-bottom: 0.6rem;
+        }
+        .screen .sub {
+            font-size: 1.1rem;
+            color: #b8f8ff;
+            margin-bottom: 1.25rem;
+            max-width: 34rem;
+        }
+        .screen .meta {
+            font-size: 0.95rem;
+            color: rgba(255, 255, 255, 0.76);
+            line-height: 1.6;
+            max-width: 36rem;
+            margin-bottom: 1.5rem;
+        }
+        .screen button {
+            border: 0;
+            border-radius: 999px;
+            padding: 0.95rem 2rem;
+            font-size: 1.05rem;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            color: #170f2c;
+            background: linear-gradient(135deg, #fff47b, #ff74e8);
+            box-shadow: 0 0 22px rgba(255, 117, 232, 0.45);
+            cursor: pointer;
+            pointer-events: auto;
+        }
+        .screen button:hover { transform: translateY(-1px); }
+        .screen .credit {
+            margin-top: 1rem;
+            font-size: 0.82rem;
+            color: rgba(255, 255, 255, 0.55);
+        }
+        .hidden { display: none !important; }
+
+        #mobile-controls {
+            display: none;
+            position: fixed;
+            inset: auto 0 0 0;
+            height: 38%;
+            pointer-events: auto;
+            z-index: 15;
+        }
+        .touch-zone {
+            position: absolute;
+            bottom: 18px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            gap: 12px;
+            width: 100%;
+            padding: 0 1rem;
+        }
+        .touch-btn {
+            width: 74px;
+            height: 74px;
+            border-radius: 22px;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            background: rgba(255, 255, 255, 0.12);
+            color: rgba(255, 255, 255, 0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            user-select: none;
+            -webkit-user-select: none;
+            backdrop-filter: blur(8px);
+        }
+        .touch-btn:active, .touch-btn.active {
+            background: rgba(255, 255, 255, 0.25);
+            border-color: rgba(255, 255, 255, 0.55);
+        }
+        @media (pointer: coarse), (max-width: 840px) {
+            #mobile-controls { display: block; }
+            #hint { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div id="score">0</div>
+        <div id="status">Collect stars and use invisibility to slip past party bots.</div>
+        <div id="cloak-bar">
+            <div id="cloak-label">Cloak ready</div>
+            <div id="cloak-meter"><div id="cloak-fill"></div></div>
+        </div>
+        <div id="hint">Move: A/D or ←/→ · Jump: Space/W/↑ · Cloak: Shift/E · Reach the disco portal</div>
+    </div>
+
+    <div id="mobile-controls">
+        <div class="touch-zone">
+            <div class="touch-btn" id="btn-left">◀</div>
+            <div class="touch-btn" id="btn-jump">⤒</div>
+            <div class="touch-btn" id="btn-cloak">✦</div>
+            <div class="touch-btn" id="btn-right">▶</div>
+        </div>
+    </div>
+
+    <div id="title-screen" class="screen">
+        <h1>Party Jump</h1>
+        <p class="sub">Jump between floating 3D platforms, grab disco stars, and reach the final portal without falling.</p>
+        <p class="meta">The invisibility cloak lets you phase through party bots for a few seconds, but it needs time to recharge. Keep moving, stay on the platforms, and finish the course.</p>
+        <button id="start-btn">Start the Party</button>
+        <p class="credit">Party Platformer — NCWIT Indiana AIC Awards</p>
+    </div>
+
+    <div id="gameover-screen" class="screen hidden">
+        <h1 id="end-title">Game Over</h1>
+        <p class="sub" id="end-message">You fell off the dance floor.</p>
+        <p class="meta" id="end-score">Score: 0</p>
+        <button id="restart-btn">Try Again</button>
+        <p class="credit">Party Platformer — NCWIT Indiana AIC Awards</p>
+    </div>
+
+    <script>
+        const CONFIG = {
+            playerSpeed: 0.12,
+            jumpVelocity: 0.22,
+            gravity: 0.012,
+            forwardSpeed: 0.055,
+            maxForwardSpeed: 0.12,
+            minForwardSpeed: 0.03,
+            cloakDuration: 180,
+            cloakCooldown: 600,
+            cloakActiveAlpha: 0.35,
+            worldDrop: -8,
+            playerRadius: 0.45,
+        };
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x090814);
+        scene.fog = new THREE.Fog(0x090814, 18, 90);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+        camera.position.set(0, 8, 12);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffe7d3, 0.9);
+        scene.add(ambientLight);
+
+        const keyLight = new THREE.DirectionalLight(0xffffff, 1.1);
+        keyLight.position.set(8, 14, 9);
+        scene.add(keyLight);
+
+        const partyLight = new THREE.PointLight(0xff5bd2, 2.2, 50);
+        partyLight.position.set(0, 8, 8);
+        scene.add(partyLight);
+
+        const neonLight = new THREE.PointLight(0x6cfaff, 1.8, 44);
+        neonLight.position.set(-8, 6, -8);
+        scene.add(neonLight);
+
+        const floor = new THREE.Mesh(
+            new THREE.PlaneGeometry(180, 180),
+            new THREE.MeshStandardMaterial({ color: 0x060611, roughness: 1, metalness: 0 })
+        );
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = -8.2;
+        scene.add(floor);
+
+        const grid = new THREE.GridHelper(180, 90, 0x3b2d68, 0x1b1830);
+        grid.position.y = -8.19;
+        scene.add(grid);
+
+        const stars = [];
+        for (let i = 0; i < 120; i++) {
+            const star = new THREE.Mesh(
+                new THREE.SphereGeometry(0.04, 6, 6),
+                new THREE.MeshBasicMaterial({ color: i % 3 === 0 ? 0xfff3b0 : 0xb7f8ff })
+            );
+            const spread = 90;
+            star.position.set((Math.random() - 0.5) * spread, 5 + Math.random() * 16, -Math.random() * 120);
+            star.userData.twinkle = Math.random() * Math.PI * 2;
+            stars.push(star);
+            scene.add(star);
+        }
+
+        const gameObjects = {
+            platforms: [],
+            enemies: [],
+            collectibles: [],
+            portal: null,
+            particles: [],
+        };
+
+        const player = new THREE.Mesh(
+            new THREE.BoxGeometry(0.9, 1.2, 0.9),
+            new THREE.MeshStandardMaterial({
+                color: 0xffe45b,
+                emissive: 0xff7ad9,
+                emissiveIntensity: 0.35,
+                roughness: 0.25,
+                metalness: 0.55,
+                transparent: true,
+                opacity: 1,
+            })
+        );
+        player.position.set(0, 1.8, 2.5);
+        scene.add(player);
+
+        const playerGlow = new THREE.PointLight(0xffe45b, 1.4, 10);
+        playerGlow.position.set(0, 2, 0);
+        player.add(playerGlow);
+
+        const controls = {
+            left: false,
+            right: false,
+            jump: false,
+            cloak: false,
+        };
+
+        const keys = {};
+        let gameState = 'title';
+        let score = 0;
+        let frame = 0;
+        let groundPlatform = null;
+        let currentPlatformIndex = 0;
+        let velocity = new THREE.Vector3();
+        let grounded = false;
+        let coyoteFrames = 0;
+        let jumpBufferFrames = 0;
+        let previousJumpInput = false;
+        let cloakTimer = 0;
+        let cloakCooldownTimer = 0;
+        let cloakActive = false;
+        let cloakQueued = false;
+        let forwardTarget = 0;
+        let targetReached = false;
+
+        function rand(min, max) {
+            return min + Math.random() * (max - min);
+        }
+
+        function clamp(value, min, max) {
+            return Math.max(min, Math.min(max, value));
+        }
+
+        function createPlatform({ x, y, z, width, depth, height = 0.8, color = 0x6cfaff, emissive = 0x1d3557, moving = false, axis = 'x', range = 1.5, speed = 0.01, spin = 0 }) {
+            const geometry = new THREE.BoxGeometry(width, height, depth);
+            const material = new THREE.MeshStandardMaterial({
+                color,
+                emissive,
+                emissiveIntensity: 0.3,
+                roughness: 0.35,
+                metalness: 0.65,
+            });
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(x, y, z);
+            mesh.userData = {
+                baseX: x,
+                baseY: y,
+                baseZ: z,
+                width,
+                depth,
+                height,
+                moving,
+                axis,
+                range,
+                speed,
+                spin,
+                spawnIndex: gameObjects.platforms.length,
+            };
+            scene.add(mesh);
+            gameObjects.platforms.push(mesh);
+            return mesh;
+        }
+
+        function createCollectible(x, y, z) {
+            const group = new THREE.Group();
+            const star = new THREE.Mesh(
+                new THREE.IcosahedronGeometry(0.34, 0),
+                new THREE.MeshStandardMaterial({ color: 0xfff06a, emissive: 0xffa44d, emissiveIntensity: 0.8, roughness: 0.25, metalness: 0.15 })
+            );
+            const halo = new THREE.Mesh(
+                new THREE.TorusGeometry(0.48, 0.07, 10, 20),
+                new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 })
+            );
+            halo.rotation.x = Math.PI / 2;
+            group.add(star, halo);
+            group.position.set(x, y, z);
+            group.userData = { taken: false, bob: Math.random() * Math.PI * 2 };
+            scene.add(group);
+            gameObjects.collectibles.push(group);
+            return group;
+        }
+
+        function createEnemy(platform, offsetX = 0, offsetZ = 0) {
+            const bot = new THREE.Mesh(
+                new THREE.SphereGeometry(0.42, 18, 18),
+                new THREE.MeshStandardMaterial({ color: 0xff5bd2, emissive: 0x6cfaff, emissiveIntensity: 0.35, roughness: 0.3, metalness: 0.5, transparent: true, opacity: 1 })
+            );
+            const antenna = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.05, 0.05, 0.55, 8),
+                new THREE.MeshBasicMaterial({ color: 0xffffff })
+            );
+            antenna.position.y = 0.55;
+            bot.add(antenna);
+            bot.position.set(platform.position.x + offsetX, platform.position.y + 1.2, platform.position.z + offsetZ);
+            bot.userData = {
+                platform,
+                baseOffsetX: offsetX,
+                baseOffsetZ: offsetZ,
+                phase: Math.random() * Math.PI * 2,
+                speed: rand(0.013, 0.024),
+                amplitude: rand(0.7, 1.5),
+                axis: Math.random() > 0.5 ? 'x' : 'z',
+            };
+            scene.add(bot);
+            gameObjects.enemies.push(bot);
+            return bot;
+        }
+
+        function spawnParticles(position, color = 0xffffff, count = 12) {
+            for (let i = 0; i < count; i++) {
+                const particle = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.12, 0.12, 0.12),
+                    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 })
+                );
+                particle.position.copy(position);
+                particle.userData.velocity = new THREE.Vector3(rand(-0.12, 0.12), rand(0.03, 0.15), rand(-0.12, 0.12));
+                particle.userData.life = rand(0.5, 1);
+                scene.add(particle);
+                gameObjects.particles.push(particle);
+            }
+        }
+
+        function playTone(freq, duration, type = 'sine', gainValue = 0.08) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(gainValue, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        function playJumpSound() { playTone(360, 0.14, 'triangle', 0.07); }
+        function playCollectSound() { playTone(940, 0.1, 'sine', 0.08); }
+        function playCloakSound() { playTone(220, 0.18, 'sawtooth', 0.05); }
+        function playHitSound() { playTone(120, 0.3, 'square', 0.09); }
+        function playWinSound() { playTone(660, 0.14, 'triangle', 0.08); setTimeout(() => playTone(990, 0.18, 'triangle', 0.07), 90); }
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function setStatus(text) {
+            document.getElementById('status').textContent = text;
+        }
+
+        function updateCloakUI() {
+            const label = document.getElementById('cloak-label');
+            const fill = document.getElementById('cloak-fill');
+            const cooldownProgress = 1 - clamp(cloakCooldownTimer / CONFIG.cloakCooldown, 0, 1);
+            if (cloakActive) {
+                label.textContent = `Cloak active ${Math.ceil(cloakTimer / 60)}s`;
+                fill.style.width = `${clamp(cloakTimer / CONFIG.cloakDuration, 0, 1) * 100}%`;
+            } else if (cloakCooldownTimer > 0) {
+                label.textContent = `Cloak cooling ${Math.ceil(cloakCooldownTimer / 60)}s`;
+                fill.style.width = `${cooldownProgress * 100}%`;
+            } else {
+                label.textContent = 'Cloak ready';
+                fill.style.width = '100%';
+            }
+        }
+
+        function resetWorld() {
+            gameObjects.platforms.forEach(obj => scene.remove(obj));
+            gameObjects.collectibles.forEach(obj => scene.remove(obj));
+            gameObjects.enemies.forEach(obj => scene.remove(obj));
+            if (gameObjects.portal) scene.remove(gameObjects.portal);
+            gameObjects.particles.forEach(obj => scene.remove(obj));
+            gameObjects.platforms = [];
+            gameObjects.collectibles = [];
+            gameObjects.enemies = [];
+            gameObjects.portal = null;
+            gameObjects.particles = [];
+
+            score = 0;
+            frame = 0;
+            velocity.set(0, 0, 0);
+            grounded = false;
+            cloakTimer = 0;
+            cloakCooldownTimer = 0;
+            cloakActive = false;
+            cloakQueued = false;
+            targetReached = false;
+            currentPlatformIndex = 0;
+            coyoteFrames = 0;
+            jumpBufferFrames = 0;
+            previousJumpInput = false;
+            forwardTarget = 0;
+            player.position.set(0, 2.2, 2.5);
+            player.rotation.set(0, 0, 0);
+            player.material.opacity = 1;
+            player.material.emissiveIntensity = 0.35;
+
+            const platformPlan = [];
+            let x = 0;
+            let y = 0;
+            let z = 0;
+            const start = createPlatform({ x, y, z, width: 6, depth: 6, color: 0xffd95b, emissive: 0x4b2f00, height: 0.9 });
+            groundPlatform = start;
+            platformPlan.push(start);
+
+            for (let i = 0; i < 18; i++) {
+                z -= rand(4.2, 6.2);
+                x = clamp(x + rand(-3.5, 3.5), -10, 10);
+                y = clamp(y + rand(-0.9, 1.15), -2.5, 4.8);
+                const width = rand(2.4, 4.8);
+                const depth = rand(2.4, 4.6);
+                const moving = i > 2 && i % 4 === 0;
+                const axis = Math.random() > 0.5 ? 'x' : 'z';
+                const platform = createPlatform({
+                    x,
+                    y,
+                    z,
+                    width,
+                    depth,
+                    color: i % 2 === 0 ? 0x6cfaff : 0xff5bd2,
+                    emissive: i % 2 === 0 ? 0x14314f : 0x4f103f,
+                    moving,
+                    axis,
+                    range: rand(0.8, 1.9),
+                    speed: rand(0.01, 0.02),
+                    spin: moving ? rand(-0.02, 0.02) : 0,
+                });
+                platformPlan.push(platform);
+
+                if (i % 2 === 1) {
+                    createCollectible(x + rand(-width * 0.2, width * 0.2), y + 1.4, z + rand(-depth * 0.18, depth * 0.18));
+                }
+                if (i % 4 === 1) {
+                    createEnemy(platform, rand(-width * 0.2, width * 0.2), rand(-depth * 0.2, depth * 0.2));
+                }
+            }
+
+            const finish = createPlatform({
+                x: x + 1.5,
+                y: y + 0.6,
+                z: z - 5.2,
+                width: 7.2,
+                depth: 7.2,
+                color: 0xfff47c,
+                emissive: 0x7b4a00,
+                height: 1,
+                moving: true,
+                axis: 'x',
+                range: 2.2,
+                speed: 0.012,
+                spin: 0.006,
+            });
+            platformPlan.push(finish);
+            forwardTarget = finish.position.z;
+
+            const portal = new THREE.Group();
+            const portalRing = new THREE.Mesh(
+                new THREE.TorusGeometry(1.8, 0.18, 14, 24),
+                new THREE.MeshStandardMaterial({ color: 0xff5bd2, emissive: 0xff5bd2, emissiveIntensity: 0.95, roughness: 0.2, metalness: 0.15 })
+            );
+            const portalCore = new THREE.Mesh(
+                new THREE.SphereGeometry(0.9, 24, 24),
+                new THREE.MeshStandardMaterial({ color: 0x6cfaff, emissive: 0x6cfaff, emissiveIntensity: 1.25, transparent: true, opacity: 0.95 })
+            );
+            portalRing.rotation.x = Math.PI / 2;
+            portal.position.set(finish.position.x, finish.position.y + 1.9, finish.position.z);
+            portal.add(portalRing, portalCore);
+            portal.userData = { finish };
+            scene.add(portal);
+            gameObjects.portal = portal;
+
+            const skyline = new THREE.Group();
+            for (let i = 0; i < 16; i++) {
+                const tower = new THREE.Mesh(
+                    new THREE.BoxGeometry(rand(0.8, 2.2), rand(4, 16), rand(0.8, 2.2)),
+                    new THREE.MeshStandardMaterial({
+                        color: i % 2 === 0 ? 0x1d1438 : 0x2d1d4d,
+                        emissive: i % 3 === 0 ? 0x4f103f : 0x14314f,
+                        emissiveIntensity: 0.18,
+                        roughness: 0.95,
+                        metalness: 0.05,
+                    })
+                );
+                tower.position.set(rand(-28, 28), tower.geometry.parameters.height / 2 - 8.2, -rand(20, 120));
+                skyline.add(tower);
+            }
+            scene.add(skyline);
+
+            setStatus('Bounce forward, collect stars, and use the cloak if the bots get too close.');
+            updateScore();
+            updateCloakUI();
+            document.getElementById('title-screen').classList.add('hidden');
+            document.getElementById('gameover-screen').classList.add('hidden');
+            gameState = 'playing';
+        }
+
+        function updateScore(delta = 0) {
+            score += delta;
+            document.getElementById('score').textContent = score;
+        }
+
+        function endGame(won = false) {
+            gameState = 'ended';
+            document.getElementById('end-title').textContent = won ? 'You Win' : 'Game Over';
+            document.getElementById('end-message').textContent = won ? 'You reached the disco portal.' : 'You fell off the dance floor.';
+            document.getElementById('end-score').textContent = `Score: ${score}`;
+            document.getElementById('gameover-screen').classList.remove('hidden');
+            if (won) playWinSound();
+            else playHitSound();
+        }
+
+        function sphereToBoxCollision(sphere, box, tolerance = 0) {
+            const halfW = box.userData.width / 2 + tolerance;
+            const halfD = box.userData.depth / 2 + tolerance;
+            const top = box.position.y + box.userData.height / 2;
+            const bottom = box.position.y - box.userData.height / 2;
+            const withinX = Math.abs(sphere.position.x - box.position.x) <= halfW;
+            const withinZ = Math.abs(sphere.position.z - box.position.z) <= halfD;
+            const nearTop = (sphere.position.y - CONFIG.playerRadius) <= (top + 0.15) && (sphere.position.y - CONFIG.playerRadius) >= (top - 0.8);
+            const aboveBottom = (sphere.position.y + CONFIG.playerRadius) >= bottom;
+            return withinX && withinZ && nearTop && aboveBottom;
+        }
+
+        function findSupportPlatform() {
+            let candidate = null;
+            for (const platform of gameObjects.platforms) {
+                const halfW = platform.userData.width / 2 + 0.2;
+                const halfD = platform.userData.depth / 2 + 0.2;
+                const top = platform.position.y + platform.userData.height / 2;
+                if (
+                    Math.abs(player.position.x - platform.position.x) <= halfW &&
+                    Math.abs(player.position.z - platform.position.z) <= halfD &&
+                    player.position.y - CONFIG.playerRadius <= top + 0.15 &&
+                    player.position.y - CONFIG.playerRadius >= top - 1.0
+                ) {
+                    if (!candidate || top > candidate.top) candidate = { platform, top };
+                }
+            }
+            return candidate;
+        }
+
+        function triggerCloak() {
+            if (cloakActive || cloakCooldownTimer > 0) return;
+            cloakActive = true;
+            cloakTimer = CONFIG.cloakDuration;
+            cloakCooldownTimer = CONFIG.cloakCooldown;
+            playCloakSound();
+            spawnParticles(player.position.clone(), 0x6cfaff, 18);
+            setStatus('Cloak engaged. Bots cannot hit you for a few seconds.');
+        }
+
+        function bindTouchButton(id, handler) {
+            const button = document.getElementById(id);
+            button.addEventListener('touchstart', (event) => {
+                event.preventDefault();
+                button.classList.add('active');
+                handler(true);
+            }, { passive: false });
+            button.addEventListener('touchend', (event) => {
+                event.preventDefault();
+                button.classList.remove('active');
+                handler(false);
+            }, { passive: false });
+            button.addEventListener('touchcancel', () => {
+                button.classList.remove('active');
+                handler(false);
+            });
+            button.addEventListener('mousedown', () => handler(true));
+            button.addEventListener('mouseup', () => handler(false));
+            button.addEventListener('mouseleave', () => handler(false));
+        }
+
+        bindTouchButton('btn-left', (down) => { controls.left = down; });
+        bindTouchButton('btn-right', (down) => { controls.right = down; });
+        bindTouchButton('btn-jump', (down) => { controls.jump = down; });
+        bindTouchButton('btn-cloak', (down) => { controls.cloak = down; });
+
+        window.addEventListener('keydown', (event) => {
+            keys[event.key] = true;
+            if (event.code === 'Space' || event.key === 'ArrowUp' || event.key.toLowerCase() === 'w') {
+                event.preventDefault();
+                controls.jump = true;
+            }
+            if ((event.key === 'Shift' || event.key.toLowerCase() === 'e') && gameState === 'playing') {
+                triggerCloak();
+            }
+            if (event.code === 'Space' && gameState === 'title') {
+                startGame();
+            }
+        });
+
+        window.addEventListener('keyup', (event) => {
+            keys[event.key] = false;
+            if (event.code === 'Space' || event.key === 'ArrowUp' || event.key.toLowerCase() === 'w') {
+                controls.jump = false;
+            }
+            if (event.key === 'Shift' || event.key.toLowerCase() === 'e') {
+                controls.cloak = false;
+            }
+        });
+
+        document.getElementById('start-btn').addEventListener('click', startGame);
+        document.getElementById('restart-btn').addEventListener('click', startGame);
+        document.getElementById('title-screen').addEventListener('click', (event) => {
+            if (event.target === document.getElementById('title-screen')) startGame();
+        });
+
+        function startGame() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            resetWorld();
+        }
+
+        function updatePlatforms() {
+            for (const platform of gameObjects.platforms) {
+                if (platform.userData.moving) {
+                    const t = frame * platform.userData.speed + platform.userData.spawnIndex;
+                    if (platform.userData.axis === 'x') platform.position.x = platform.userData.baseX + Math.sin(t) * platform.userData.range;
+                    else platform.position.z = platform.userData.baseZ + Math.cos(t) * platform.userData.range;
+                    platform.position.y = platform.userData.baseY + Math.sin(t * 1.3) * 0.18;
+                }
+                if (platform.userData.spin) {
+                    platform.rotation.y += platform.userData.spin;
+                }
+            }
+        }
+
+        function updateCollectibles() {
+            for (const item of gameObjects.collectibles) {
+                item.userData.bob += 0.05;
+                item.rotation.y += 0.03;
+                item.position.y += Math.sin(item.userData.bob) * 0.01;
+                if (item.userData.taken) continue;
+
+                if (item.children.length && item.position.distanceTo(player.position) < 0.95) {
+                    item.userData.taken = true;
+                    item.visible = false;
+                    updateScore(10);
+                    playCollectSound();
+                    spawnParticles(item.position.clone(), 0xfff06a, 16);
+                }
+
+            }
+
+            if (gameObjects.portal && gameObjects.portal.position.distanceTo(player.position) < 2.2) {
+                targetReached = true;
+                endGame(true);
+            }
+        }
+
+        function updateEnemies() {
+            for (const enemy of gameObjects.enemies) {
+                const platform = enemy.userData.platform;
+                const t = frame * enemy.userData.speed + enemy.userData.phase;
+                const movement = Math.sin(t) * enemy.userData.amplitude;
+                if (enemy.userData.axis === 'x') {
+                    enemy.position.x = platform.position.x + enemy.userData.baseOffsetX + movement;
+                    enemy.position.z = platform.position.z + enemy.userData.baseOffsetZ;
+                } else {
+                    enemy.position.z = platform.position.z + enemy.userData.baseOffsetZ + movement;
+                    enemy.position.x = platform.position.x + enemy.userData.baseOffsetX;
+                }
+                enemy.position.y = platform.position.y + platform.userData.height / 2 + 1.0 + Math.sin(t * 2) * 0.12;
+                enemy.rotation.y += 0.03;
+
+                if (!cloakActive && enemy.position.distanceTo(player.position) < 0.9) {
+                    endGame(false);
+                    return;
+                }
+            }
+        }
+
+        function updateParticles() {
+            for (let i = gameObjects.particles.length - 1; i >= 0; i--) {
+                const particle = gameObjects.particles[i];
+                particle.position.add(particle.userData.velocity);
+                particle.userData.velocity.y -= 0.006;
+                particle.userData.life -= 0.02;
+                particle.material.opacity = particle.userData.life;
+                if (particle.userData.life <= 0) {
+                    scene.remove(particle);
+                    gameObjects.particles.splice(i, 1);
+                }
+            }
+        }
+
+        function updateBackgroundStars() {
+            for (const star of stars) {
+                star.material.opacity = 0.6 + Math.sin(frame * 0.04 + star.userData.twinkle) * 0.35;
+                star.position.y += Math.sin(frame * 0.005 + star.userData.twinkle) * 0.002;
+                if (star.position.z > player.position.z + 16) star.position.z -= 120;
+                if (star.position.z < player.position.z - 130) star.position.z += 120;
+            }
+        }
+
+        function tickControls() {
+            const left = controls.left || keys['ArrowLeft'] || keys['a'] || keys['A'];
+            const right = controls.right || keys['ArrowRight'] || keys['d'] || keys['D'];
+            const jump = controls.jump || keys[' '] || keys['Spacebar'];
+            const wantsCloak = controls.cloak || keys['Shift'] || keys['e'] || keys['E'];
+
+            const horizontal = (right ? 1 : 0) - (left ? 1 : 0);
+            velocity.x += horizontal * CONFIG.playerSpeed * 0.12;
+            velocity.x *= grounded ? 0.86 : 0.94;
+
+            let forwardSpeed = CONFIG.forwardSpeed;
+            if (keys['ArrowDown'] || keys['s'] || keys['S']) forwardSpeed -= 0.02;
+            if (keys['ArrowUp'] || keys['w'] || keys['W']) forwardSpeed += 0.03;
+            forwardSpeed = clamp(forwardSpeed, CONFIG.minForwardSpeed, CONFIG.maxForwardSpeed);
+            forwardTarget = forwardSpeed;
+            velocity.z = THREE.MathUtils.lerp(velocity.z, forwardTarget, 0.08);
+
+            if (jump && !previousJumpInput) {
+                jumpBufferFrames = 8;
+            } else if (jumpBufferFrames > 0) {
+                jumpBufferFrames--;
+            }
+
+            previousJumpInput = jump;
+
+            if (wantsCloak && gameState === 'playing' && !cloakActive && cloakCooldownTimer <= 0) {
+                triggerCloak();
+                controls.cloak = false;
+            }
+        }
+
+        function updatePlayer() {
+            velocity.y -= CONFIG.gravity;
+            player.position.x += velocity.x;
+            player.position.y += velocity.y;
+            player.position.z -= velocity.z;
+
+            player.rotation.y += 0.025;
+            player.rotation.z = THREE.MathUtils.lerp(player.rotation.z, -velocity.x * 1.1, 0.08);
+            player.material.emissiveIntensity = cloakActive ? 0.1 : 0.35;
+            player.material.opacity = cloakActive ? CONFIG.cloakActiveAlpha : 1;
+
+            grounded = false;
+            let landedPlatform = null;
+            let bestTop = -Infinity;
+            for (const platform of gameObjects.platforms) {
+                const halfW = platform.userData.width / 2;
+                const halfD = platform.userData.depth / 2;
+                const top = platform.position.y + platform.userData.height / 2;
+                const bottom = platform.position.y - platform.userData.height / 2;
+                const xInside = Math.abs(player.position.x - platform.position.x) <= halfW - 0.05;
+                const zInside = Math.abs(player.position.z - platform.position.z) <= halfD - 0.05;
+                const playerBottom = player.position.y - CONFIG.playerRadius;
+                if (xInside && zInside && playerBottom <= top + 0.18 && playerBottom >= bottom - 0.5 && top > bestTop) {
+                    bestTop = top;
+                    landedPlatform = platform;
+                }
+            }
+
+            if (landedPlatform && velocity.y <= 0) {
+                grounded = true;
+                player.position.y = bestTop + CONFIG.playerRadius;
+                velocity.y = 0;
+                currentPlatformIndex = gameObjects.platforms.indexOf(landedPlatform);
+                if (Math.abs(velocity.x) > 0.01) updateScore(1);
+                coyoteFrames = 6;
+            } else if (coyoteFrames > 0) {
+                coyoteFrames--;
+            }
+
+            if (jumpBufferFrames > 0 && (grounded || coyoteFrames > 0)) {
+                velocity.y = CONFIG.jumpVelocity;
+                grounded = false;
+                coyoteFrames = 0;
+                jumpBufferFrames = 0;
+                playJumpSound();
+                spawnParticles(player.position.clone().add(new THREE.Vector3(0, -0.4, 0)), 0xfff06a, 10);
+                setStatus('Jump!');
+            }
+
+            if (player.position.y < CONFIG.worldDrop) {
+                endGame(false);
+            }
+
+            player.position.x = clamp(player.position.x, -18, 18);
+        }
+
+        function updateCloakState() {
+            if (cloakActive) {
+                cloakTimer--;
+                if (cloakTimer <= 0) {
+                    cloakActive = false;
+                    setStatus('Cloak faded. Wait for the cooldown, then use it again.');
+                }
+            } else if (cloakCooldownTimer > 0) {
+                cloakCooldownTimer--;
+            }
+            updateCloakUI();
+        }
+
+        function updateCamera() {
+            const desired = new THREE.Vector3(
+                player.position.x * 0.45,
+                player.position.y + 5.6,
+                player.position.z + 11.5
+            );
+            camera.position.lerp(desired, 0.08);
+            camera.lookAt(player.position.x, player.position.y + 0.35, player.position.z - 3.5);
+            partyLight.position.lerp(new THREE.Vector3(player.position.x + 1, player.position.y + 4, player.position.z + 3), 0.15);
+            neonLight.position.lerp(new THREE.Vector3(player.position.x - 5, player.position.y + 2, player.position.z - 6), 0.08);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            frame++;
+
+            if (gameState === 'playing') {
+                tickControls();
+                updatePlatforms();
+                updatePlayer();
+                updateCollectibles();
+                updateEnemies();
+                updateCloakState();
+                updateParticles();
+                updateBackgroundStars();
+                updateCamera();
+
+                if (grounded && frame % 12 === 0) updateScore(1);
+            } else {
+                updateParticles();
+                updateBackgroundStars();
+                camera.position.x = THREE.MathUtils.lerp(camera.position.x, 0, 0.03);
+                camera.position.y = THREE.MathUtils.lerp(camera.position.y, 8, 0.03);
+                camera.position.z = THREE.MathUtils.lerp(camera.position.z, 12, 0.03);
+                camera.lookAt(0, 0, 0);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
