@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>City Runner — Thanishka</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #0e0218; font-family: 'Segoe UI', system-ui, sans-serif; }
+    canvas { display: block; }
+
+    /* ---- UI Overlay ---- */
+    #ui {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 10;
+    }
+    #score-box {
+      position: absolute; top: 18px; right: 20px;
+      font-size: 1.5rem; color: #ff8c00; font-weight: 700;
+      text-shadow: 0 0 12px #ff8c00, 0 0 4px #ff4400;
+    }
+    #timer-box {
+      position: absolute; top: 18px; left: 50%; transform: translateX(-50%);
+      font-size: 1.5rem; color: #e040fb; font-weight: 700;
+      text-shadow: 0 0 12px #e040fb;
+    }
+    #boss-warning {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      font-size: 2.2rem; color: #ff2020; font-weight: 900;
+      text-shadow: 0 0 24px #ff2020, 0 0 8px #ff2020;
+      opacity: 0; transition: opacity 0.25s; pointer-events: none;
+      white-space: nowrap;
+    }
+    #controls-hint {
+      position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+      font-size: 0.85rem; color: #553355;
+    }
+
+    /* ---- Minimap ---- */
+    #minimap-wrap {
+      position: absolute; top: 18px; left: 20px;
+      border: 1px solid #4a2090; border-radius: 4px;
+      background: rgba(10,1,21,0.75);
+    }
+    #minimap { display: block; }
+
+    /* ---- Screens ---- */
+    .screen {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      background: rgba(14,2,24,0.93); z-index: 20; pointer-events: auto;
+      gap: 0;
+    }
+    .screen h1 {
+      font-size: clamp(2.2rem, 6vw, 4rem); font-weight: 900;
+      color: #ff8c00;
+      text-shadow: 0 0 22px #ff8c00, 0 0 50px #ff4400;
+      margin-bottom: 0.3rem; text-align: center; letter-spacing: 2px;
+    }
+    .screen .sub { font-size: 1rem; color: #7a5080; margin-bottom: 1.2rem; text-align: center; }
+    .screen .instructions {
+      font-size: 0.92rem; color: #aa88bb; margin-bottom: 1.5rem;
+      text-align: center; line-height: 2; max-width: 420px; padding: 0 1rem;
+    }
+    .screen .start-text {
+      font-size: 1.25rem; color: #e040fb; margin-bottom: 0.5rem;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    .screen .final-score { font-size: 2rem; color: #ff8c00; margin-bottom: 1.4rem; }
+    .screen button {
+      padding: 0.75rem 2.4rem; font-size: 1.05rem;
+      border: 2px solid #ff8c00; background: transparent; color: #ff8c00;
+      border-radius: 8px; cursor: pointer; transition: background 0.2s;
+      pointer-events: auto; min-height: 44px; font-family: inherit;
+    }
+    .screen button:hover, .screen button:active { background: rgba(255,140,0,0.18); }
+    .credit { position: absolute; bottom: 18px; font-size: 0.78rem; color: #4a2060; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+    .hidden { display: none !important; }
+
+    /* ---- Mobile D-Pad ---- */
+    #mobile-controls {
+      display: none; position: fixed; bottom: 0; left: 0;
+      width: 100%; height: 44%; z-index: 15; pointer-events: auto;
+    }
+    #dpad {
+      position: absolute; bottom: 28px; left: 24px;
+      width: 168px; height: 168px;
+    }
+    .dpad-btn {
+      position: absolute; width: 52px; height: 52px; border-radius: 10px;
+      border: 2px solid rgba(255,140,0,0.45); background: rgba(255,140,0,0.13);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem; color: rgba(255,140,0,0.75);
+      user-select: none; -webkit-user-select: none; touch-action: none;
+    }
+    .dpad-btn:active, .dpad-btn.active {
+      background: rgba(255,140,0,0.35); border-color: rgba(255,140,0,0.9);
+    }
+    #btn-up    { top: 0;   left: 58px; }
+    #btn-down  { bottom: 0; left: 58px; }
+    #btn-left  { top: 58px; left: 0;   }
+    #btn-right { top: 58px; right: 0;  }
+    @media (pointer: coarse), (max-width: 768px) {
+      #mobile-controls { display: block; }
+      #controls-hint   { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- UI Overlay -->
+<div id="ui">
+  <div id="minimap-wrap"><canvas id="minimap" width="130" height="130"></canvas></div>
+  <div id="score-box">SCORE: 0</div>
+  <div id="timer-box">2:00</div>
+  <div id="boss-warning">⚠ BOSS INCOMING!</div>
+  <div id="controls-hint">WASD / Arrow Keys to navigate the maze</div>
+</div>
+
+<!-- Mobile Controls -->
+<div id="mobile-controls">
+  <div id="dpad">
+    <div class="dpad-btn" id="btn-up"    data-key="ArrowUp">▲</div>
+    <div class="dpad-btn" id="btn-down"  data-key="ArrowDown">▼</div>
+    <div class="dpad-btn" id="btn-left"  data-key="ArrowLeft">◀</div>
+    <div class="dpad-btn" id="btn-right" data-key="ArrowRight">▶</div>
+  </div>
+</div>
+
+<!-- Title Screen -->
+<div id="title-screen" class="screen">
+  <h1>CITY RUNNER</h1>
+  <p class="sub">A Cyberpunk Maze Escape</p>
+  <div class="instructions">
+    🏃 Navigate the neon maze and reach the glowing exit portal!<br>
+    ⚠️ A massive boss drone spawns every <strong>30 seconds</strong> — avoid it!<br>
+    ⏱️ You have <strong>2 minutes</strong> to escape!<br><br>
+    <strong>WASD</strong> or <strong>Arrow Keys</strong> to move
+  </div>
+  <p class="start-text">Press SPACE or Tap to Start</p>
+  <p class="credit">A game by Thanishka · NCWIT Indiana AIC Awards 2026</p>
+</div>
+
+<!-- Game Over Screen -->
+<div id="gameover-screen" class="screen hidden">
+  <h1>GAME OVER</h1>
+  <p class="final-score" id="final-score-text">Score: 0</p>
+  <button id="restart-btn">Play Again</button>
+  <p class="credit">A game by Thanishka · NCWIT Indiana AIC Awards 2026</p>
+</div>
+
+<!-- Win Screen -->
+<div id="win-screen" class="screen hidden">
+  <h1>YOU ESCAPED!</h1>
+  <p class="final-score" id="win-score-text">Score: 0</p>
+  <button id="win-btn">Play Again</button>
+  <p class="credit">A game by Thanishka · NCWIT Indiana AIC Awards 2026</p>
+</div>
+
+<script>
+// =====================================================================
+// CONFIG
+// =====================================================================
+const MAZE_W    = 7;          // maze cells wide
+const MAZE_H    = 7;          // maze cells tall
+const GRID_W    = 2*MAZE_W+1; // 15
+const GRID_H    = 2*MAZE_H+1; // 15
+const CS        = 2.2;        // world units per grid cell
+const WALL_H    = 3.0;
+const P_SPEED   = 0.065;
+const P_RADIUS  = 0.40;
+const BOSS_INT  = 30;         // seconds between boss spawns
+const BOSS_SPD  = 0.028;
+const GAME_SEC  = 120;        // 2 minutes
+
+// Sunset × Cyberpunk palette
+const COL = {
+  bg:       0x0e0218,
+  fog:      0x1a0428,
+  floor:    0x090112,
+  wall:     0x2a1648,
+  wallGlow: 0xff7000,
+  grid:     0x3a0070,
+  player:   0xff6b35,
+  visor:    0x00e5ff,
+  exit:     0xff3355,
+  exitGlow: 0xff6688,
+  boss:     0x3a0510,
+  bossGlow: 0xff6400,
+  bossEye:  0xff0f0f,
+  particle: 0xff8c00,
+  star:     0xffaa77,
+};
+
+// =====================================================================
+// MAZE GENERATION (recursive DFS)
+// =====================================================================
+let grid = []; // GRID_H × GRID_W boolean array; true = wall
+
+function generateMaze() {
+  grid = Array.from({length: GRID_H}, () => Array(GRID_W).fill(true));
+  // Open passage cells
+  for (let r = 1; r < GRID_H; r += 2)
+    for (let c = 1; c < GRID_W; c += 2)
+      grid[r][c] = false;
+
+  const vis = Array.from({length: MAZE_H}, () => Array(MAZE_W).fill(false));
+  function carve(mr, mc) {
+    vis[mr][mc] = true;
+    const dirs = [{dr:-1,dc:0},{dr:1,dc:0},{dr:0,dc:1},{dr:0,dc:-1}];
+    for (let i = dirs.length-1; i > 0; i--) {
+      const j = Math.floor(Math.random()*(i+1));
+      [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
+    }
+    for (const {dr,dc} of dirs) {
+      const nr = mr+dr, nc = mc+dc;
+      if (nr>=0 && nr<MAZE_H && nc>=0 && nc<MAZE_W && !vis[nr][nc]) {
+        grid[2*mr+1+dr][2*mc+1+dc] = false; // remove wall
+        carve(nr, nc);
+      }
+    }
+  }
+  carve(0, 0);
+}
+
+// Cell coords (0..MAZE_H-1) → world center of passage cell
+function cellWorld(mr, mc) {
+  const gr = 2*mr+1, gc = 2*mc+1;
+  return { x: gc*CS + CS*0.5, z: gr*CS + CS*0.5 };
+}
+
+// World → grid index
+function wToG(x, z) {
+  return { gc: Math.floor(x/CS), gr: Math.floor(z/CS) };
+}
+
+// World → maze cell
+function wToCell(x, z) {
+  const { gc, gr } = wToG(x, z);
+  return {
+    mc: Math.max(0, Math.min(MAZE_W-1, Math.floor(gc/2))),
+    mr: Math.max(0, Math.min(MAZE_H-1, Math.floor(gr/2)))
+  };
+}
+
+function isWall(x, z) {
+  const gc = Math.floor(x/CS), gr = Math.floor(z/CS);
+  if (gr<0||gr>=GRID_H||gc<0||gc>=GRID_W) return true;
+  return grid[gr][gc];
+}
+
+function canMove(x, z) {
+  const r = P_RADIUS * 0.85;
+  return !isWall(x-r,z-r) && !isWall(x+r,z-r) && !isWall(x-r,z+r) && !isWall(x+r,z+r);
+}
+
+// =====================================================================
+// BFS PATHFINDING (boss chases player through maze)
+// =====================================================================
+function bfsPath(smr, smc, emr, emc) {
+  if (smr===emr && smc===emc) return [];
+  const dirs = [{dr:-1,dc:0},{dr:1,dc:0},{dr:0,dc:1},{dr:0,dc:-1}];
+  const queue = [[[smr,smc]]];
+  const vis = new Set([`${smr},${smc}`]);
+  while (queue.length) {
+    const path = queue.shift();
+    const [cr,cc] = path[path.length-1];
+    for (const {dr,dc} of dirs) {
+      const nr=cr+dr, nc=cc+dc;
+      if (nr<0||nr>=MAZE_H||nc<0||nc>=MAZE_W) continue;
+      const k = `${nr},${nc}`;
+      if (vis.has(k)) continue;
+      if (grid[2*cr+1+dr][2*cc+1+dc]) continue; // wall between cells
+      const np = [...path,[nr,nc]];
+      if (nr===emr && nc===emc) return np;
+      vis.add(k);
+      queue.push(np);
+    }
+  }
+  return null;
+}
+
+// =====================================================================
+// THREE.JS SETUP
+// =====================================================================
+const scene    = new THREE.Scene();
+scene.background = new THREE.Color(COL.bg);
+scene.fog        = new THREE.FogExp2(COL.fog, 0.035);
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 120);
+camera.position.set(5, 10, 14);
+camera.lookAt(5, 0, 5);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// Lighting
+const ambLight = new THREE.AmbientLight(0x3a0d45, 0.6);
+scene.add(ambLight);
+
+const sunLight = new THREE.DirectionalLight(0xff8c42, 0.9);
+sunLight.position.set(12, 22, 12);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(1024, 1024);
+scene.add(sunLight);
+
+const rimLight = new THREE.DirectionalLight(0x8800ff, 0.35);
+rimLight.position.set(-10, 8, -10);
+scene.add(rimLight);
+
+const pLight = new THREE.PointLight(0xff6b35, 2, 10);
+scene.add(pLight);
+
+// =====================================================================
+// SCENE: MAZE, EXIT PORTAL, DECORATIVE CITY
+// =====================================================================
+let wallObjs   = [];
+let mazeFloor  = null;
+let exitGroup  = null;
+let gridHelper = null;
+
+const wallMat = new THREE.MeshStandardMaterial({
+  color: COL.wall, roughness: 0.4, metalness: 0.85,
+  emissive: 0x150630, emissiveIntensity: 0.35
+});
+const trimMat = new THREE.MeshStandardMaterial({
+  color: COL.wallGlow, emissive: COL.wallGlow, emissiveIntensity: 0.7,
+  roughness: 0.2, metalness: 0.5
+});
+const floorMat = new THREE.MeshStandardMaterial({
+  color: COL.floor, roughness: 0.9, metalness: 0.1
+});
+
+function buildMaze() {
+  for (const o of wallObjs) scene.remove(o);
+  wallObjs = [];
+  if (mazeFloor) scene.remove(mazeFloor);
+  if (exitGroup)  scene.remove(exitGroup);
+  if (gridHelper) scene.remove(gridHelper);
+
+  const totalW = GRID_W * CS, totalH = GRID_H * CS;
+
+  // Floor
+  mazeFloor = new THREE.Mesh(new THREE.PlaneGeometry(totalW, totalH), floorMat);
+  mazeFloor.rotation.x = -Math.PI/2;
+  mazeFloor.position.set(totalW/2, -0.02, totalH/2);
+  mazeFloor.receiveShadow = true;
+  scene.add(mazeFloor);
+
+  // Grid
+  gridHelper = new THREE.GridHelper(Math.max(totalW,totalH), Math.max(GRID_W,GRID_H), COL.grid, COL.grid);
+  gridHelper.position.set(totalW/2, 0.01, totalH/2);
+  scene.add(gridHelper);
+
+  // Walls
+  for (let gr=0; gr<GRID_H; gr++) {
+    for (let gc=0; gc<GRID_W; gc++) {
+      if (!grid[gr][gc]) continue;
+      const cx = gc*CS + CS/2, cz = gr*CS + CS/2;
+
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(CS, WALL_H, CS), wallMat);
+      wall.position.set(cx, WALL_H/2, cz);
+      wall.castShadow = true; wall.receiveShadow = true;
+      scene.add(wall); wallObjs.push(wall);
+
+      // Neon top trim
+      const trim = new THREE.Mesh(new THREE.BoxGeometry(CS+0.04, 0.1, CS+0.04), trimMat);
+      trim.position.set(cx, WALL_H+0.05, cz);
+      scene.add(trim); wallObjs.push(trim);
+
+      // Neon base strip
+      const base = new THREE.Mesh(new THREE.BoxGeometry(CS+0.04, 0.1, CS+0.04), trimMat);
+      base.position.set(cx, 0.05, cz);
+      scene.add(base); wallObjs.push(base);
+    }
+  }
+
+  // Exit portal
+  exitGroup = makeExitPortal();
+  const ew = cellWorld(MAZE_H-1, MAZE_W-1);
+  exitGroup.position.set(ew.x, 0, ew.z);
+  scene.add(exitGroup);
+}
+
+function makeExitPortal() {
+  const g = new THREE.Group();
+  const rMat = new THREE.MeshStandardMaterial({
+    color: COL.exit, emissive: COL.exit, emissiveIntensity: 1.0
+  });
+  const r2Mat = new THREE.MeshStandardMaterial({
+    color: COL.exitGlow, emissive: COL.exitGlow, emissiveIntensity: 0.6
+  });
+  // Outer ring
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.12, 8, 22), rMat);
+  ring.position.y = 1.3; ring.rotation.x = Math.PI/2;
+  g.add(ring);
+  // Inner ring
+  const ring2 = new THREE.Mesh(new THREE.TorusGeometry(1.15, 0.06, 8, 22), r2Mat);
+  ring2.position.y = 1.3; ring2.rotation.x = Math.PI/2;
+  g.add(ring2);
+  // Portal disc
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(0.93, 20),
+    new THREE.MeshStandardMaterial({
+      color: COL.exit, emissive: COL.exit, emissiveIntensity: 0.45,
+      transparent: true, opacity: 0.55
+    })
+  );
+  disc.rotation.x = -Math.PI/2; disc.position.y = 1.3;
+  g.add(disc);
+  // Glowing pillars
+  const pilMat = new THREE.MeshStandardMaterial({
+    color: 0xff8800, emissive: 0xff8800, emissiveIntensity: 0.8
+  });
+  for (let i=0; i<4; i++) {
+    const a = (i/4)*Math.PI*2;
+    const pil = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.6, 0.14), pilMat);
+    pil.position.set(Math.cos(a)*1.05, 1.3, Math.sin(a)*1.05);
+    g.add(pil);
+  }
+  // "EXIT" sign
+  const signMat = new THREE.MeshStandardMaterial({
+    color: 0xffdddd, emissive: COL.exit, emissiveIntensity: 0.6
+  });
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.3, 0.08), signMat);
+  sign.position.set(0, 2.8, 0);
+  g.add(sign);
+  return g;
+}
+
+// Decorative city buildings — placed WELL OUTSIDE maze bounds (known-issues: no overlap)
+function buildDecorativeCity() {
+  const totalW = GRID_W * CS; // ~33 units
+  const buildMat = new THREE.MeshStandardMaterial({
+    color: 0x180828, roughness: 0.7, metalness: 0.9,
+    emissive: 0x080115, emissiveIntensity: 0.2
+  });
+  const winMat = new THREE.MeshStandardMaterial({
+    color: 0xff8c00, emissive: 0xff8c00, emissiveIntensity: 0.55
+  });
+  const winMat2 = new THREE.MeshStandardMaterial({
+    color: 0xe040fb, emissive: 0xe040fb, emissiveIntensity: 0.5
+  });
+
+  // Buildings only outside play area (> totalW+12 or < -12 or z < -12 or z > totalW+12)
+  const defs = [
+    {x: totalW+15, z:  4, w:3.5, h:16, d:3.5},
+    {x: totalW+20, z: 11, w:2.5, h:22, d:2.5},
+    {x: totalW+14, z: 18, w:4,   h:11, d:4  },
+    {x: totalW+22, z: 22, w:2,   h:18, d:2  },
+    {x: totalW+16, z: 27, w:3.5, h:24, d:3.5},
+    {x: -15, z:  6, w:3, h:14, d:3},
+    {x: -20, z: 14, w:2, h:20, d:2},
+    {x: -13, z: 22, w:4, h:10, d:3},
+    {x: -18, z: 28, w:2, h:18, d:2},
+    {x:  6,  z: -15, w:3, h:14, d:3},
+    {x: 14,  z: -20, w:2, h:19, d:2},
+    {x: 22,  z: -14, w:3.5, h:22, d:3.5},
+    {x:  6,  z: totalW+15, w:3, h:12, d:3},
+    {x: 16,  z: totalW+20, w:4, h:26, d:4},
+    {x: 26,  z: totalW+13, w:2, h:16, d:2},
+  ];
+
+  for (const {x, z, w, h, d} of defs) {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), buildMat);
+    b.position.set(x, h/2, z);
+    scene.add(b);
+
+    // Windows
+    const wm = Math.random() > 0.5 ? winMat : winMat2;
+    for (let row=1; row<Math.floor(h/2.2); row++) {
+      for (let col=-1; col<=1; col+=2) {
+        const win = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.28, 0.06), wm);
+        win.position.set(x+col*0.55, row*2.1+0.5, z+d/2+0.04);
+        scene.add(win);
+      }
+    }
+  }
+
+  // Starfield (distant, safe from viewport)
+  const sGeo = new THREE.BufferGeometry();
+  const sv = [];
+  for (let i=0; i<400; i++) {
+    sv.push((Math.random()-0.5)*160, 10+Math.random()*50, (Math.random()-0.5)*160);
+  }
+  sGeo.setAttribute('position', new THREE.Float32BufferAttribute(sv, 3));
+  scene.add(new THREE.Points(sGeo,
+    new THREE.PointsMaterial({color: COL.star, size: 0.18, sizeAttenuation: true})
+  ));
+}
+
+// =====================================================================
+// PLAYER MODEL (compound: torso + head + visor + arms + legs + backpack)
+// =====================================================================
+let playerGroup = null;
+let playerPos   = {x: 0, z: 0};
+let playerFace  = 0;
+let stepTimer   = 0;
+
+function makePlayer() {
+  const g = new THREE.Group();
+  const bMat = new THREE.MeshStandardMaterial({
+    color: COL.player, roughness: 0.4, metalness: 0.65,
+    emissive: 0xff3200, emissiveIntensity: 0.12
+  });
+  const hMat = new THREE.MeshStandardMaterial({color: 0xffb070, roughness: 0.5, metalness: 0.3});
+  const vMat = new THREE.MeshStandardMaterial({color: COL.visor, emissive: COL.visor, emissiveIntensity: 1.0});
+  const helMat = new THREE.MeshStandardMaterial({color: 0x991100, roughness: 0.4, metalness: 0.75});
+  const legMat = new THREE.MeshStandardMaterial({color: 0xcc3a00, roughness: 0.5, metalness: 0.7});
+  const packMat = new THREE.MeshStandardMaterial({color: 0x180038, roughness: 0.6, metalness: 0.8});
+  const antMat = new THREE.MeshStandardMaterial({color: 0xe040fb, emissive: 0xe040fb, emissiveIntensity: 0.9});
+
+  // Torso
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.72, 0.32), bMat);
+  torso.position.y = 0.54; g.add(torso);
+  // Chest panel
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.28, 0.06),
+    new THREE.MeshStandardMaterial({color: 0xff6600, emissive: 0xff4400, emissiveIntensity: 0.5})
+  );
+  panel.position.set(0, 0.56, 0.19); g.add(panel);
+  // Head
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.23, 8, 8), hMat);
+  head.position.y = 1.07; g.add(head);
+  // Helmet
+  const helm = new THREE.Mesh(new THREE.SphereGeometry(0.26, 8, 8, 0, Math.PI*2, 0, Math.PI*0.55), helMat);
+  helm.position.y = 1.09; g.add(helm);
+  // Visor
+  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.09, 0.08), vMat);
+  visor.position.set(0, 1.08, 0.22); g.add(visor);
+  // Arms
+  const armGeo = new THREE.BoxGeometry(0.14, 0.48, 0.14);
+  const lArm = new THREE.Mesh(armGeo, bMat); lArm.position.set(-0.35, 0.52, 0); g.add(lArm);
+  const rArm = lArm.clone(); rArm.position.x = 0.35; g.add(rArm);
+  // Legs
+  const legGeo = new THREE.CylinderGeometry(0.09, 0.07, 0.5, 6);
+  const lLeg = new THREE.Mesh(legGeo, legMat); lLeg.position.set(-0.15, 0.04, 0); g.add(lLeg);
+  const rLeg = lLeg.clone(); rLeg.position.x = 0.15; g.add(rLeg);
+  // Backpack
+  const pack = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.38, 0.16), packMat);
+  pack.position.set(0, 0.58, -0.24); g.add(pack);
+  // Antenna
+  const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.28, 4), antMat);
+  ant.position.set(0.1, 0.93, -0.22); g.add(ant);
+
+  return g;
+}
+
+// =====================================================================
+// BOSS MODEL (compound: body + dome + eyes + rotors + chassis)
+// =====================================================================
+let bosses = []; // array of { group, x, z, path, pathIdx, pTimer, hover }
+
+function makeBoss() {
+  const g = new THREE.Group();
+  const bMat = new THREE.MeshStandardMaterial({
+    color: COL.boss, roughness: 0.3, metalness: 0.95,
+    emissive: 0x280005, emissiveIntensity: 0.25
+  });
+  const gMat = new THREE.MeshStandardMaterial({
+    color: COL.bossGlow, emissive: COL.bossGlow, emissiveIntensity: 0.85,
+    roughness: 0.25, metalness: 0.5
+  });
+  const eMat = new THREE.MeshStandardMaterial({
+    color: COL.bossEye, emissive: COL.bossEye, emissiveIntensity: 1.3
+  });
+
+  // Main body
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.85, 1.1), bMat);
+  body.position.y = 1.1; g.add(body);
+  // Armor plate
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.55, 0.12), gMat);
+  plate.position.set(0, 1.12, 0.56); g.add(plate);
+  // Sensor dome
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(0.52, 10, 10, 0, Math.PI*2, 0, Math.PI*0.58), bMat
+  );
+  dome.position.y = 1.7; g.add(dome);
+  // Eyes
+  const lEye = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 8), eMat);
+  lEye.position.set(-0.24, 1.76, 0.44); g.add(lEye);
+  const rEye = lEye.clone(); rEye.position.x = 0.24; g.add(rEye);
+  // 4 rotor arms
+  for (let i=0; i<4; i++) {
+    const a = (i/4)*Math.PI*2;
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.07, 0.65), gMat);
+    arm.position.set(Math.cos(a)*0.95, 1.5, Math.sin(a)*0.95);
+    arm.rotation.y = a; g.add(arm);
+    const rotor = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.045, 6, 14), gMat);
+    rotor.position.set(Math.cos(a)*1.05, 1.52, Math.sin(a)*1.05);
+    rotor.rotation.x = Math.PI/2; g.add(rotor);
+  }
+  // Lower chassis
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.32, 0.75), bMat);
+  chassis.position.y = 0.54; g.add(chassis);
+  // Leg pylons
+  const offsets = [[-0.38,-0.3],[0.38,-0.3],[-0.38,0.3],[0.38,0.3]];
+  for (const [bx,bz] of offsets) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 0.5, 6), bMat);
+    leg.position.set(bx, 0.17, bz); g.add(leg);
+  }
+  // Glowing undercarriage
+  const under = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.06, 0.65), gMat);
+  under.position.y = 0.34; g.add(under);
+
+  g.scale.setScalar(1.35);
+  return g;
+}
+
+// =====================================================================
+// PARTICLES
+// =====================================================================
+let parts = [];
+
+function spawnParts(x, z, col, n=10) {
+  const mat = new THREE.MeshBasicMaterial({color: col, transparent: true});
+  for (let i=0; i<n; i++) {
+    const m = new THREE.Mesh(
+      new THREE.SphereGeometry(0.05+Math.random()*0.09, 4, 4),
+      mat.clone()
+    );
+    m.position.set(x, 0.4+Math.random()*0.7, z);
+    scene.add(m);
+    parts.push({
+      m, vx:(Math.random()-0.5)*0.12, vy:0.06+Math.random()*0.08,
+      vz:(Math.random()-0.5)*0.12, life:1.0
+    });
+  }
+}
+
+function tickParts() {
+  for (let i=parts.length-1; i>=0; i--) {
+    const p = parts[i];
+    p.m.position.x += p.vx; p.m.position.y += p.vy; p.m.position.z += p.vz;
+    p.vy -= 0.004; p.life -= 0.03;
+    p.m.material.opacity = p.life;
+    if (p.life <= 0) { scene.remove(p.m); parts.splice(i,1); }
+  }
+}
+
+// Player trail
+let trailTimer = 0;
+
+// =====================================================================
+// AUDIO
+// =====================================================================
+let ctx = null;
+function initAudio() { ctx = new (window.AudioContext||window.webkitAudioContext)(); }
+function resumeAudio() { if (ctx && ctx.state==='suspended') ctx.resume(); }
+
+function beep(freq, type='square', dur=0.12, vol=0.14) {
+  if (!ctx) return;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.connect(g); g.connect(ctx.destination);
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+dur);
+  o.start(); o.stop(ctx.currentTime+dur);
+}
+
+function bossWarnSfx() {
+  [220,277,330,440].forEach((f,i) => setTimeout(()=>beep(f,'sawtooth',0.28,0.2), i*110));
+}
+function winSfx() {
+  [523,659,784,1047,1319].forEach((f,i) => setTimeout(()=>beep(f,'sine',0.4,0.28), i*130));
+}
+function dieSfx() {
+  [440,370,294,220,165].forEach((f,i) => setTimeout(()=>beep(f,'sawtooth',0.45,0.22), i*160));
+}
+function stepSfx() { beep(110+Math.random()*30,'sine',0.06,0.04); }
+
+let musicOn = false;
+function startMusic() {
+  if (!ctx) return;
+  musicOn = true;
+  // Cyberpunk A-minor arpeggio (midrange frequencies, no sub-bass)
+  const seq = [440,523,659,784,523,659,880,784,659,523,440,392];
+  let idx = 0;
+  function next() {
+    if (!musicOn) return;
+    beep(seq[idx%seq.length]/2, 'square', 0.18, 0.05);
+    if (idx%4===0) beep(seq[idx%seq.length], 'sine', 0.15, 0.035);
+    idx++;
+    setTimeout(next, 240);
+  }
+  setTimeout(next, 200);
+}
+function stopMusic() { musicOn = false; }
+
+// =====================================================================
+// GAME STATE
+// =====================================================================
+let running   = false;
+let score     = 0;
+let timeLeft  = GAME_SEC;
+let bossTimer = BOSS_INT;
+let lastTS    = 0;
+let scoreTimer = 0;
+
+const keys    = {};
+const mKeys   = {};
+
+// =====================================================================
+// INPUT
+// =====================================================================
+document.addEventListener('keydown', e => { keys[e.key] = true; });
+document.addEventListener('keyup',   e => { keys[e.key] = false; });
+document.addEventListener('keydown', e => {
+  if ((e.key===' '||e.key==='Enter') && !running) {
+    if (!document.getElementById('title-screen').classList.contains('hidden'))   startGame();
+    else if (!document.getElementById('gameover-screen').classList.contains('hidden')) restartGame();
+    else if (!document.getElementById('win-screen').classList.contains('hidden'))      restartGame();
+  }
+});
+
+document.querySelectorAll('.dpad-btn').forEach(btn => {
+  const k = btn.dataset.key;
+  btn.addEventListener('touchstart', e=>{e.preventDefault();mKeys[k]=true;btn.classList.add('active');},{passive:false});
+  btn.addEventListener('touchend',   e=>{e.preventDefault();mKeys[k]=false;btn.classList.remove('active');},{passive:false});
+  btn.addEventListener('mousedown',  ()=>{mKeys[k]=true;});
+  btn.addEventListener('mouseup',    ()=>{mKeys[k]=false;});
+});
+
+const titleEl = document.getElementById('title-screen');
+titleEl.addEventListener('click', startGame);
+titleEl.addEventListener('touchend', e=>{e.preventDefault();startGame();},{passive:false});
+
+document.getElementById('restart-btn').addEventListener('click', restartGame);
+document.getElementById('restart-btn').addEventListener('touchend',e=>{e.preventDefault();restartGame();},{passive:false});
+document.getElementById('win-btn').addEventListener('click', restartGame);
+document.getElementById('win-btn').addEventListener('touchend',e=>{e.preventDefault();restartGame();},{passive:false});
+
+// =====================================================================
+// START / RESTART
+// =====================================================================
+function startGame() {
+  resumeAudio();
+  document.getElementById('title-screen').classList.add('hidden');
+  document.getElementById('gameover-screen').classList.add('hidden');
+  document.getElementById('win-screen').classList.add('hidden');
+
+  score = 0; timeLeft = GAME_SEC; bossTimer = BOSS_INT; scoreTimer = 0;
+
+  generateMaze();
+  buildMaze();
+
+  if (playerGroup) scene.remove(playerGroup);
+  playerGroup = makePlayer();
+  const sw = cellWorld(0, 0);
+  playerPos = {x: sw.x, z: sw.z};
+  playerGroup.position.set(playerPos.x, 0, playerPos.z);
+  scene.add(playerGroup);
+
+  for (const b of bosses) scene.remove(b.group);
+  bosses = [];
+  for (const p of parts) scene.remove(p.m);
+  parts = [];
+
+  running = true;
+  startMusic();
+  updateHUD();
+}
+
+function restartGame() { startGame(); }
+
+// =====================================================================
+// BOSS SPAWN
+// =====================================================================
+function spawnBoss() {
+  const group = makeBoss();
+  const sw = cellWorld(0, 0);
+  const bd = { group, x: sw.x, z: sw.z, path: null, pathIdx: 1, pTimer: 0, hover: Math.random()*Math.PI*2 };
+  group.position.set(bd.x, 0, bd.z);
+  scene.add(group);
+  bosses.push(bd);
+
+  const el = document.getElementById('boss-warning');
+  el.style.opacity = '1';
+  setTimeout(()=>el.style.opacity='0', 2200);
+  bossWarnSfx();
+  spawnParts(bd.x, bd.z, COL.bossEye, 16);
+}
+
+// =====================================================================
+// BOSS UPDATE
+// =====================================================================
+function updateBosses(dt) {
+  const {mc: pMC, mr: pMR} = wToCell(playerPos.x, playerPos.z);
+
+  for (const bd of bosses) {
+    bd.hover += dt * 2.5;
+    bd.group.rotation.y += dt * 0.55;
+
+    // Recalculate path every 2s
+    bd.pTimer -= dt;
+    if (bd.pTimer <= 0) {
+      bd.pTimer = 2.0;
+      const {mc: bMC, mr: bMR} = wToCell(bd.x, bd.z);
+      bd.path = bfsPath(bMR, bMC, pMR, pMC);
+      bd.pathIdx = 1;
+    }
+
+    // Move along path
+    if (bd.path && bd.pathIdx < bd.path.length) {
+      const [tr, tc] = bd.path[bd.pathIdx];
+      const tw = cellWorld(tr, tc);
+      const dx = tw.x - bd.x, dz = tw.z - bd.z;
+      const dist = Math.sqrt(dx*dx+dz*dz);
+      if (dist < 0.12) {
+        bd.x = tw.x; bd.z = tw.z; bd.pathIdx++;
+      } else {
+        const spd = BOSS_SPD * 60 * dt;
+        bd.x += (dx/dist)*spd; bd.z += (dz/dist)*spd;
+      }
+    }
+
+    bd.group.position.set(bd.x, 0.08 + Math.sin(bd.hover)*0.12, bd.z);
+
+    // Collision
+    const dx = bd.x - playerPos.x, dz = bd.z - playerPos.z;
+    if (Math.sqrt(dx*dx+dz*dz) < 1.05) { endGame(false); return; }
+  }
+}
+
+// =====================================================================
+// HUD + MINIMAP
+// =====================================================================
+function updateHUD() {
+  document.getElementById('score-box').textContent = `SCORE: ${score}`;
+  const m = Math.floor(timeLeft/60);
+  const s = String(Math.floor(timeLeft%60)).padStart(2,'0');
+  const timerEl = document.getElementById('timer-box');
+  timerEl.textContent = `${m}:${s}`;
+  timerEl.style.color = timeLeft < 30 ? '#ff2020' : '#e040fb';
+  timerEl.style.textShadow = timeLeft < 30 ? '0 0 12px #ff2020' : '0 0 12px #e040fb';
+}
+
+function drawMinimap() {
+  const canvas = document.getElementById('minimap');
+  const c = canvas.getContext('2d');
+  const sz = canvas.width;
+  const cpx = sz / GRID_W;
+
+  c.fillStyle = '#090112';
+  c.fillRect(0, 0, sz, sz);
+
+  for (let gr=0; gr<GRID_H; gr++) {
+    for (let gc=0; gc<GRID_W; gc++) {
+      if (grid[gr][gc]) {
+        c.fillStyle = '#3a1060';
+        c.fillRect(gc*cpx, gr*cpx, cpx, cpx);
+      }
+    }
+  }
+
+  // Exit
+  const ec = cellWorld(MAZE_H-1, MAZE_W-1);
+  const {gr: egr, gc: egc} = wToG(ec.x, ec.z);
+  c.fillStyle = '#ff3355';
+  c.fillRect(egc*cpx, egr*cpx, cpx+1, cpx+1);
+
+  // Bosses
+  for (const bd of bosses) {
+    const {gr: bgr, gc: bgc} = wToG(bd.x, bd.z);
+    c.fillStyle = '#ff1010';
+    c.fillRect(bgc*cpx-1, bgr*cpx-1, cpx+2, cpx+2);
+  }
+
+  // Player
+  const {gr: pgr, gc: pgc} = wToG(playerPos.x, playerPos.z);
+  c.fillStyle = '#ff8c00';
+  c.beginPath();
+  c.arc((pgc+0.5)*cpx, (pgr+0.5)*cpx, cpx*0.75, 0, Math.PI*2);
+  c.fill();
+}
+
+// =====================================================================
+// END STATES
+// =====================================================================
+function endGame(won) {
+  running = false;
+  stopMusic();
+
+  if (won) {
+    const bonus = Math.floor(timeLeft * 10);
+    score += bonus;
+    winSfx();
+    spawnParts(playerPos.x, playerPos.z, 0xffdd00, 28);
+    document.getElementById('win-score-text').textContent =
+      `Score: ${score}  (+${bonus} time bonus!)`;
+    document.getElementById('win-screen').classList.remove('hidden');
+  } else {
+    dieSfx();
+    spawnParts(playerPos.x, playerPos.z, 0xff2020, 22);
+    document.getElementById('final-score-text').textContent = `Score: ${score}`;
+    document.getElementById('gameover-screen').classList.remove('hidden');
+  }
+}
+
+// =====================================================================
+// ANIMATION LOOP
+// =====================================================================
+function animate(ts) {
+  requestAnimationFrame(animate);
+
+  const dt = Math.min((ts - lastTS) / 1000, 0.05);
+  lastTS = ts;
+
+  if (running) {
+    // Timer
+    timeLeft -= dt;
+    if (timeLeft <= 0) { timeLeft = 0; updateHUD(); endGame(false); return; }
+
+    // Score over time
+    scoreTimer += dt;
+    if (scoreTimer >= 1) { score += 5; scoreTimer -= 1; }
+
+    // Boss spawn
+    bossTimer -= dt;
+    if (bossTimer <= 0) { bossTimer = BOSS_INT; spawnBoss(); }
+
+    // Movement input
+    const right = (keys['ArrowRight']||keys['d']||keys['D']||mKeys['ArrowRight']) ? 1 : 0;
+    const left  = (keys['ArrowLeft'] ||keys['a']||keys['A']||mKeys['ArrowLeft'] ) ? 1 : 0;
+    const down  = (keys['ArrowDown'] ||keys['s']||keys['S']||mKeys['ArrowDown'] ) ? 1 : 0;
+    const up    = (keys['ArrowUp']   ||keys['w']||keys['W']||mKeys['ArrowUp']   ) ? 1 : 0;
+    const mx = right - left, mz = down - up;
+    const moving = mx !== 0 || mz !== 0;
+    const spd = P_SPEED * 60 * dt;
+
+    if (mx !== 0) {
+      const nx = playerPos.x + mx*spd;
+      if (canMove(nx, playerPos.z)) playerPos.x = nx;
+    }
+    if (mz !== 0) {
+      const nz = playerPos.z + mz*spd;
+      if (canMove(playerPos.x, nz)) playerPos.z = nz;
+    }
+
+    // Player step sound
+    if (moving) {
+      stepTimer -= dt;
+      if (stepTimer <= 0) { stepTimer = 0.28; stepSfx(); }
+    }
+
+    // Player trail particles
+    if (moving) {
+      trailTimer -= dt;
+      if (trailTimer <= 0) {
+        trailTimer = 0.08;
+        spawnParts(playerPos.x + (Math.random()-0.5)*0.2,
+                   playerPos.z + (Math.random()-0.5)*0.2, COL.particle, 2);
+      }
+    }
+
+    // Player model
+    if (playerGroup) {
+      const bob = moving ? Math.sin(ts*0.012)*0.055 : 0;
+      playerGroup.position.set(playerPos.x, bob, playerPos.z);
+      if (moving) playerGroup.rotation.y = Math.atan2(mx, mz);
+      // Leg swing
+      const legSwing = moving ? Math.sin(ts*0.015)*0.35 : 0;
+      // children[11]=lLeg, [12]=rLeg (indices)
+      const lLeg = playerGroup.children[11];
+      const rLeg = playerGroup.children[12];
+      if (lLeg) lLeg.rotation.x =  legSwing;
+      if (rLeg) rLeg.rotation.x = -legSwing;
+    }
+
+    // Point light follows player
+    pLight.position.set(playerPos.x, 2.5, playerPos.z);
+
+    // Camera smooth follow
+    camera.position.x += (playerPos.x - camera.position.x) * 0.1;
+    camera.position.y  = 9.5;
+    camera.position.z += (playerPos.z + 6.5 - camera.position.z) * 0.1;
+    camera.lookAt(playerPos.x, 0.8, playerPos.z);
+
+    // Animate exit portal
+    if (exitGroup) {
+      exitGroup.rotation.y  += dt * 1.4;
+      if (exitGroup.children[0]) exitGroup.children[0].rotation.z += dt * 2.5;
+    }
+
+    // Win check
+    const ew = cellWorld(MAZE_H-1, MAZE_W-1);
+    const edx = ew.x - playerPos.x, edz = ew.z - playerPos.z;
+    if (Math.sqrt(edx*edx+edz*edz) < 1.3) { endGame(true); return; }
+
+    // Bosses
+    updateBosses(dt);
+
+    // Particles
+    tickParts();
+
+    updateHUD();
+    drawMinimap();
+  }
+
+  renderer.render(scene, camera);
+}
+
+// =====================================================================
+// INIT
+// =====================================================================
+initAudio();
+generateMaze();
+buildMaze();
+buildDecorativeCity();
+
+// Place player model for title screen preview
+playerGroup = makePlayer();
+const sw0 = cellWorld(0, 0);
+playerPos = {x: sw0.x, z: sw0.z};
+playerGroup.position.set(playerPos.x, 0, playerPos.z);
+scene.add(playerGroup);
+
+lastTS = performance.now();
+animate(lastTS);
+</script>
+</body>
+</html>
